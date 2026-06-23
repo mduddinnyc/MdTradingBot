@@ -16,12 +16,19 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Auth-bootstrap endpoints return their own meaningful 401s (e.g. wrong
+// password) — these must never trigger the silent-refresh-and-redirect
+// dance below, or a login failure gets swallowed by a hard page reload
+// before React ever renders the error.
+const AUTH_BOOTSTRAP_PATHS = ["/auth/login", "/auth/register", "/auth/refresh"];
+
 // On 401, attempt refresh then retry once
 api.interceptors.response.use(
   (r) => r,
   async (err) => {
     const original = err.config;
-    if (err.response?.status === 401 && !original._retry) {
+    const isAuthBootstrap = AUTH_BOOTSTRAP_PATHS.some((p) => original?.url?.includes(p));
+    if (err.response?.status === 401 && !original._retry && !isAuthBootstrap) {
       original._retry = true;
       try {
         const rt = localStorage.getItem("rt");
