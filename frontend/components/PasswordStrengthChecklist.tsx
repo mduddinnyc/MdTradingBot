@@ -11,17 +11,23 @@ const RULES: Array<{ label: string; test: (v: string) => boolean }> = [
 
 export default function PasswordStrengthChecklist({ password }: { password: string }) {
   return (
-    <ul className="space-y-1 mt-2">
+    <ul className="space-y-1.5 mt-2">
       {RULES.map(({ label, test }) => {
         const pass = test(password);
         return (
           <li
             key={label}
-            className={`flex items-center gap-1.5 text-xs transition-colors ${
-              pass ? "text-buy" : "text-gray-500"
+            className={`flex items-center gap-2 text-xs transition-colors ${
+              pass ? "text-buy" : "text-sell"
             }`}
           >
-            {pass ? <Check size={12} /> : <X size={12} />}
+            <span
+              className={`flex items-center justify-center w-3.5 h-3.5 rounded-full shrink-0 ${
+                pass ? "bg-buy/20" : "bg-sell/20"
+              }`}
+            >
+              {pass ? <Check size={9} /> : <X size={9} />}
+            </span>
             {label}
           </li>
         );

@@ -10,16 +10,22 @@ import { authApi } from "@/lib/api";
 import OAuthButtons from "@/components/OAuthButtons";
 import PasswordStrengthChecklist from "@/components/PasswordStrengthChecklist";
 
-const schema = z.object({
-  full_name: z.string().min(1, "Required"),
-  email: z.string().min(1, "Email is required").email("Enter a valid email"),
-  password: z.string()
-    .min(8, "Min 8 chars")
-    .regex(/[A-Z]/, "Need uppercase")
-    .regex(/[a-z]/, "Need lowercase")
-    .regex(/[0-9]/, "Need digit")
-    .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "Need special character"),
-});
+const schema = z
+  .object({
+    full_name: z.string().min(1, "Required"),
+    email: z.string().min(1, "Email is required").email("Enter a valid email"),
+    password: z.string()
+      .min(8, "Min 8 chars")
+      .regex(/[A-Z]/, "Need uppercase")
+      .regex(/[a-z]/, "Need lowercase")
+      .regex(/[0-9]/, "Need digit")
+      .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "Need special character"),
+    confirm_password: z.string(),
+  })
+  .refine((d) => d.password === d.confirm_password, {
+    message: "Passwords don't match",
+    path: ["confirm_password"],
+  });
 type Form = z.infer<typeof schema>;
 
 export default function RegisterPage() {
@@ -29,7 +35,7 @@ export default function RegisterPage() {
 
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<Form>({
     resolver: zodResolver(schema),
-    defaultValues: { full_name: "", email: "", password: "" },
+    defaultValues: { full_name: "", email: "", password: "", confirm_password: "" },
   });
   const password = watch("password");
 
@@ -46,14 +52,11 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="card w-full max-w-sm">
-        <div className="flex items-center gap-2 mb-6">
-          <div className="w-9 h-9 rounded-lg bg-brand/20 flex items-center justify-center">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-9 h-9 rounded-lg bg-brand/20 flex items-center justify-center shrink-0">
             <UserPlus size={18} className="text-brand" />
           </div>
-          <div>
-            <h1 className="text-xl font-bold">Create your account</h1>
-            <p className="text-xs text-gray-400">Start trading with TradingPlatform</p>
-          </div>
+          <h1 className="text-2xl font-bold leading-tight">Create your account</h1>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
@@ -70,24 +73,36 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="label">Password</label>
-            <div className="relative">
-              <input
-                className="input pr-10"
-                type={showPw ? "text" : "password"}
-                {...register("password")}
-                placeholder="••••••••"
-              />
+            <div className="flex items-center justify-between">
+              <label className="label">Password</label>
               <button
                 type="button"
                 onClick={() => setShowPw((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                className="flex items-center gap-1 text-xs text-brand hover:underline"
                 tabIndex={-1}
               >
-                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                {showPw ? <EyeOff size={13} /> : <Eye size={13} />}
+                {showPw ? "Hide" : "Show"}
               </button>
             </div>
+            <input
+              className="input"
+              type={showPw ? "text" : "password"}
+              {...register("password")}
+              placeholder="••••••••"
+            />
             <PasswordStrengthChecklist password={password} />
+          </div>
+
+          <div>
+            <label className="label">Confirm password</label>
+            <input
+              className="input"
+              type={showPw ? "text" : "password"}
+              {...register("confirm_password")}
+              placeholder="••••••••"
+            />
+            {errors.confirm_password && <p className="text-xs text-sell mt-1">{errors.confirm_password.message}</p>}
           </div>
 
           {error && <p className="text-sell text-sm">{error}</p>}

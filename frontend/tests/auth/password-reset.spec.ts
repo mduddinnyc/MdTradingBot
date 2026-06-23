@@ -76,7 +76,7 @@ test.describe("Reset password page", () => {
     const pwField = page.locator('input[name="new_password"]');
 
     await pwField.fill("alllowercase1");
-    await expect(page.getByText("One uppercase letter")).toHaveClass(/text-gray-500/);
+    await expect(page.getByText("One uppercase letter")).toHaveClass(/text-sell/);
 
     await pwField.fill("AllRequired1!");
     await expect(page.getByText("One uppercase letter")).toHaveClass(/text-buy/);

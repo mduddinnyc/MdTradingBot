@@ -8,7 +8,8 @@ async function registerUser(page: import("@playwright/test").Page, email: string
   await page.goto("/auth/register");
   await page.getByPlaceholder("Jane Smith").fill("Login Test User");
   await page.getByPlaceholder("you@example.com").fill(email);
-  await page.locator('input[type="password"]').fill(password);
+  await page.locator('input[name="password"]').fill(password);
+  await page.locator('input[name="confirm_password"]').fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL(/\/auth\/login$/);
 }

@@ -40,14 +40,11 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="card w-full max-w-sm">
-        <div className="flex items-center gap-2 mb-6">
-          <div className="w-9 h-9 rounded-lg bg-brand/20 flex items-center justify-center">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-9 h-9 rounded-lg bg-brand/20 flex items-center justify-center shrink-0">
             <LogIn size={18} className="text-brand" />
           </div>
-          <div>
-            <h1 className="text-xl font-bold">Welcome back</h1>
-            <p className="text-xs text-gray-400">Sign in to TradingPlatform</p>
-          </div>
+          <h1 className="text-2xl font-bold leading-tight">Welcome back</h1>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
