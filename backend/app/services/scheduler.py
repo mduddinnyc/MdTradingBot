@@ -93,6 +93,42 @@ async def run_signal_cycle(timeframe: str = "1Hour") -> None:
             log.error("Signal cycle failed: %s", exc, exc_info=True)
 
 
+async def run_day_trade_universe_cycle(timeframe: str = "1Day") -> None:
+    """
+    Refreshes bars + signals for the fixed DAY_TRADE_UNIVERSE list (~40
+    liquid large-caps), independent of any one user's watchlist. Market
+    data/signals aren't user-scoped in this schema, so any single active
+    broker connection is enough to fetch real bars for the whole list —
+    powers the Day Trade Signal page's broader scan pool.
+    """
+    from app.services.day_trade_universe import DAY_TRADE_UNIVERSE
+
+    log.info("Day-trade universe cycle starting — %d symbols", len(DAY_TRADE_UNIVERSE))
+
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await db.execute(
+                select(BrokerConnection).where(BrokerConnection.is_active == True).limit(1)
+            )
+            conn = result.scalar_one_or_none()
+            if not conn:
+                log.info("Day-trade universe cycle skipped — no active broker connection")
+                return
+
+            for ticker in DAY_TRADE_UNIVERSE:
+                try:
+                    await md_svc.fetch_and_store_bars(db, conn, ticker, timeframe)
+                    await signal_engine.generate_signal(db, ticker, timeframe)
+                except Exception as exc:
+                    log.warning("Day-trade universe: %s failed: %s", ticker, exc)
+
+            await db.commit()
+            log.info("Day-trade universe cycle complete")
+        except Exception as exc:
+            await db.rollback()
+            log.error("Day-trade universe cycle failed: %s", exc, exc_info=True)
+
+
 def start_scheduler() -> None:
     # 5-minute intraday signals (day trading)
     scheduler.add_job(
@@ -139,6 +175,29 @@ def start_scheduler() -> None:
         minute=15,              # 15 min after US market close (4pm ET)
         args=["1Day"],
         id="daily_signals",
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    # Day Trade Signal page's broader fixed-universe scan
+    scheduler.add_job(
+        run_day_trade_universe_cycle,
+        trigger="cron",
+        minute="*/15",
+        hour="9-15",
+        day_of_week="mon-fri",
+        args=["1Day"],
+        id="day_trade_universe_15min",
+        replace_existing=True,
+        max_instances=1,
+    )
+    scheduler.add_job(
+        run_day_trade_universe_cycle,
+        trigger="cron",
+        hour=16,
+        minute=20,
+        args=["1Day"],
+        id="day_trade_universe_daily",
         replace_existing=True,
         max_instances=1,
     )

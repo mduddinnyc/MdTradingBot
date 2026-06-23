@@ -175,7 +175,7 @@ export default function DayTradePage() {
 
   const { data: ranked = [], isFetching } = useQuery({
     queryKey: ["signals", "day-trade", 20],
-    queryFn: () => signalApi.topRanked(20),
+    queryFn: () => signalApi.topRanked(20, "daytrade"),
     refetchInterval: 1_000,
   });
 

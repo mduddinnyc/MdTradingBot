@@ -21,6 +21,7 @@ from app.schemas.signal import (
     SignalResponse,
     WatchlistAddRequest,
 )
+from app.services.day_trade_universe import DAY_TRADE_UNIVERSE
 from app.services import market_data as md_svc
 from app.services import signal_engine
 from app.services import notifications as notif_svc
@@ -161,16 +162,22 @@ async def get_signals(current_user: CurrentUser, db: DB, limit: int = 50):
 
 
 @router.get("/top-ranked", response_model=list[RankedSignalResponse])
-async def get_top_ranked_signals(current_user: CurrentUser, db: DB, per_tier: int = 10):
+async def get_top_ranked_signals(
+    current_user: CurrentUser, db: DB, per_tier: int = 10, universe: str = "watchlist"
+):
     """
-    Top (per_tier * 3) actionable opportunities across the user's watchlist,
-    ranked by the signal engine's live confidence score (one row per symbol —
-    its most recent BUY/SELL signal). Tiered by rank position, not a fixed
-    confidence cutoff: positions 1..per_tier = green, next per_tier =
-    light_green, next per_tier = light_yellow. HOLD signals and rows missing
-    entry/target/stop are excluded — there's no real entry/exit point to
-    show for those. `per_tier` defaults to 10 (Signals page); the Day Trade
-    Signal page calls this with per_tier=20.
+    Top (per_tier * 3) actionable opportunities, ranked by the signal
+    engine's live confidence score (one row per symbol — its most recent
+    BUY/SELL signal). Tiered by rank position, not a fixed confidence
+    cutoff: positions 1..per_tier = green, next per_tier = light_green, next
+    per_tier = light_yellow. HOLD signals and rows missing entry/target/stop
+    are excluded — there's no real entry/exit point to show for those.
+
+    `universe="watchlist"` (default, Signals page): scoped to the user's own
+    watchlist — can be as small as a handful of symbols.
+    `universe="daytrade"` (Day Trade Signal page): the user's watchlist PLUS
+    a fixed list of ~40 liquid large-caps (DAY_TRADE_UNIVERSE) — a small
+    personal watchlist can't produce a real top-20+ pool on its own.
     """
     per_tier = max(1, min(per_tier, 50))
 
@@ -180,13 +187,20 @@ async def get_top_ranked_signals(current_user: CurrentUser, db: DB, per_tier: in
         )
     )
     wl = result.scalar_one_or_none()
-    if not wl:
-        return []
 
-    result = await db.execute(
-        select(WatchlistItem.symbol_id).where(WatchlistItem.watchlist_id == wl.id)
-    )
-    symbol_ids = [r[0] for r in result.all()]
+    symbol_ids: list[int] = []
+    if wl:
+        result = await db.execute(
+            select(WatchlistItem.symbol_id).where(WatchlistItem.watchlist_id == wl.id)
+        )
+        symbol_ids = [r[0] for r in result.all()]
+
+    if universe == "daytrade":
+        result = await db.execute(
+            select(Symbol.id).where(Symbol.ticker.in_(DAY_TRADE_UNIVERSE))
+        )
+        symbol_ids = list({*symbol_ids, *(r[0] for r in result.all())})
+
     if not symbol_ids:
         return []
 
