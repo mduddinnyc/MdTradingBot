@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.broker import BrokerConnection
 from app.models.market import Candle, Symbol, Watchlist, WatchlistItem
-from app.services import alpaca as alpaca_svc
+from app.services.broker_adapter import get_adapter
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ async def fetch_and_store_bars(
 ) -> int:
     """Fetch bars from Alpaca and upsert into candles. Returns count stored."""
     symbol = await get_or_create_symbol(db, ticker)
-    bars = alpaca_svc.get_bars(conn, ticker, timeframe, limit)
+    bars = get_adapter(conn.broker_name).get_bars(conn, ticker, timeframe, limit)
 
     if not bars:
         return 0
