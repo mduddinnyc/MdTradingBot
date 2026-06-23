@@ -7,6 +7,7 @@ import { z } from "zod";
 import { useState, useEffect } from "react";
 import { Shield, AlertTriangle, OctagonX } from "lucide-react";
 import { fmtPct } from "@/lib/utils";
+import OptionsAutomationPanel from "@/components/OptionsAutomationPanel";
 
 const schema = z.object({
   broker_connection_id: z.string().uuid(),
@@ -288,6 +289,8 @@ export default function AutomationPage() {
           {isSubmitting ? "Saving…" : existing ? "Update config" : "Save config"}
         </button>
       </form>
+
+      <OptionsAutomationPanel />
     </div>
   );
 }

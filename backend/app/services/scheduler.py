@@ -12,7 +12,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 
 from app.database import AsyncSessionLocal
-from app.models.automation import AutomationConfig
+from app.models.automation import AutomationConfig, OptionsAutomationConfig
 from app.models.broker import BrokerConnection
 from app.models.market import Symbol, Watchlist, WatchlistItem
 from app.services import execution as exec_svc
@@ -129,6 +129,48 @@ async def run_day_trade_universe_cycle(timeframe: str = "1Day") -> None:
             log.error("Day-trade universe cycle failed: %s", exc, exc_info=True)
 
 
+async def run_options_automation_scan() -> None:
+    """
+    For each user with options automation enabled: finds the best eligible
+    candidate and stages it (status="pending_approval"). Never places a real
+    order itself — that only happens when a human approves it via
+    POST /signals/options-automation/{id}/approve. Run this after
+    run_day_trade_universe_cycle in the schedule so fresh signals exist to
+    rank.
+    """
+    from app.services import options_execution as opt_exec
+
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await db.execute(
+                select(OptionsAutomationConfig).where(OptionsAutomationConfig.is_enabled == True)
+            )
+            configs = result.scalars().all()
+            if not configs:
+                return
+
+            log.info("Options automation scan starting — %d enabled config(s)", len(configs))
+            for config in configs:
+                result = await db.execute(
+                    select(BrokerConnection).where(BrokerConnection.id == config.broker_connection_id)
+                )
+                conn = result.scalar_one_or_none()
+                if not conn or not conn.is_active:
+                    continue
+
+                candidate = await opt_exec.find_eligible_candidate(db, config)
+                if not candidate:
+                    continue
+                sig, sym = candidate
+                await opt_exec.stage_option_trade(db, config, conn, sig, sym)
+
+            await db.commit()
+            log.info("Options automation scan complete")
+        except Exception as exc:
+            await db.rollback()
+            log.error("Options automation scan failed: %s", exc, exc_info=True)
+
+
 def start_scheduler() -> None:
     # 5-minute intraday signals (day trading)
     scheduler.add_job(
@@ -198,6 +240,19 @@ def start_scheduler() -> None:
         minute=20,
         args=["1Day"],
         id="day_trade_universe_daily",
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    # Stages (never auto-places) paper options trades — 5 min after each
+    # universe refresh above, so it has fresh signals to rank.
+    scheduler.add_job(
+        run_options_automation_scan,
+        trigger="cron",
+        minute="5,20,35,50",
+        hour="9-15",
+        day_of_week="mon-fri",
+        id="options_automation_scan",
         replace_existing=True,
         max_instances=1,
     )

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -79,6 +79,53 @@ class OrderResponse(BaseModel):
     take_profit_price: float | None
     submitted_at: datetime | None
     filled_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class OptionsAutomationConfigRequest(BaseModel):
+    broker_connection_id: uuid.UUID
+    is_enabled: bool = False
+    require_manual_approval: bool = True
+    budget_usd: float = 10_000.0
+    min_confidence: float = 0.40
+    max_contracts_per_trade: int = 1
+    max_open_positions: int = 5
+    target_dte_min: int = 7
+    target_dte_max: int = 21
+    profit_target_pct: float = 0.50
+    stop_loss_pct: float = 0.30
+
+
+class OptionsAutomationConfigResponse(BaseModel):
+    id: uuid.UUID
+    broker_connection_id: uuid.UUID
+    is_enabled: bool
+    require_manual_approval: bool
+    budget_usd: float
+    min_confidence: float
+    max_contracts_per_trade: int
+    max_open_positions: int
+    target_dte_min: int
+    target_dte_max: int
+    profit_target_pct: float
+    stop_loss_pct: float
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PendingOptionOrderResponse(BaseModel):
+    id: uuid.UUID
+    ticker: str
+    option_symbol: str | None
+    option_right: str | None
+    strike_price: float | None
+    expiration_date: date | None
+    quantity: float
+    premium_paid: float | None
+    status: str
     created_at: datetime
 
     model_config = {"from_attributes": True}

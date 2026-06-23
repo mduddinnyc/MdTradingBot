@@ -335,7 +335,9 @@ def get_latest_quote(conn: BrokerConnection, symbol: str) -> dict:
     }
 
 
-def get_options_chain(conn: BrokerConnection, symbol: str) -> dict:
+def get_options_chain(conn: BrokerConnection, symbol: str, target_dte: int | None = None) -> dict:
+    """target_dte accepted for interface parity with tradier.py's adapter —
+    this stub doesn't yet support picking a specific expiration by DTE."""
     data_client = _data_client(conn)
     instruments = _check(
         data_client.instrument.get_instrument(symbol, Category.US_OPTION.name),

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -56,7 +56,41 @@ class Order(Base):
     is_automated: Mapped[bool] = mapped_column(Boolean, default=False)
     rejection_reason: Mapped[str | None] = mapped_column(Text)
 
+    # Options — null for equity orders (the only kind that existed before this).
+    asset_type: Mapped[str] = mapped_column(String(10), nullable=False, default="equity")  # "equity" | "option"
+    option_symbol: Mapped[str | None] = mapped_column(String(40))   # real OCC symbol from the broker's chain, never hand-built
+    strike_price: Mapped[float | None] = mapped_column(Float)
+    expiration_date: Mapped[datetime | None] = mapped_column(Date)
+    option_right: Mapped[str | None] = mapped_column(String(4))     # "call" | "put"
+    premium_paid: Mapped[float | None] = mapped_column(Float)       # per-contract premium at fill/staging time
+    closing_order_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id"))
+
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     filled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OptionsAutomationConfig(Base):
+    """Paper-trading-only options automation, gated behind manual approval
+    by default (require_manual_approval) — see options_execution.py."""
+    __tablename__ = "options_automation_configs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    broker_connection_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("broker_connections.id", ondelete="CASCADE"), nullable=False)
+
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    require_manual_approval: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    budget_usd: Mapped[float] = mapped_column(Float, default=10_000.0)
+    min_confidence: Mapped[float] = mapped_column(Float, default=0.40)
+    max_contracts_per_trade: Mapped[int] = mapped_column(Integer, default=1)
+    max_open_positions: Mapped[int] = mapped_column(Integer, default=5)
+    target_dte_min: Mapped[int] = mapped_column(Integer, default=7)
+    target_dte_max: Mapped[int] = mapped_column(Integer, default=21)
+    profit_target_pct: Mapped[float] = mapped_column(Float, default=0.50)   # +50% premium
+    stop_loss_pct: Mapped[float] = mapped_column(Float, default=0.30)       # -30% premium
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

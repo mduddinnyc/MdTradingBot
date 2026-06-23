@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 import pandas as pd
 import ta as _ta
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.market import Candle, Symbol
@@ -458,3 +458,44 @@ async def generate_signal(
         result_fusion.signal_type, ticker, result_fusion.confidence, result_fusion.pattern.name
     )
     return signal
+
+
+async def get_ranked_signals(
+    db: AsyncSession,
+    symbol_ids: list[int],
+    limit: int = 30,
+    min_confidence: float = 0.0,
+) -> list[tuple[Signal, Symbol]]:
+    """
+    Shared ranking query: the latest BUY/SELL signal per symbol (not full
+    history), confidence descending, excluding HOLD and anything missing a
+    real entry price. Used by both /signals/top-ranked and the options
+    automation staging logic — kept in one place so they can never drift
+    out of sync with each other.
+    """
+    if not symbol_ids:
+        return []
+
+    latest = (
+        select(Signal.symbol_id, func.max(Signal.created_at).label("max_created"))
+        .where(Signal.symbol_id.in_(symbol_ids))
+        .group_by(Signal.symbol_id)
+        .subquery()
+    )
+
+    result = await db.execute(
+        select(Signal, Symbol)
+        .join(Symbol, Signal.symbol_id == Symbol.id)
+        .join(
+            latest,
+            (Signal.symbol_id == latest.c.symbol_id) & (Signal.created_at == latest.c.max_created),
+        )
+        .where(
+            Signal.signal_type.in_(["BUY", "SELL"]),
+            Signal.entry_price.is_not(None),
+            Signal.confidence >= min_confidence,
+        )
+        .order_by(Signal.confidence.desc())
+        .limit(limit)
+    )
+    return result.all()

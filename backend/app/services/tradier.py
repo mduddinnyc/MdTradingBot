@@ -250,6 +250,46 @@ def place_bracket_order(
     }
 
 
+def place_option_order(
+    conn: BrokerConnection,
+    underlying_symbol: str,
+    option_symbol: str,
+    side: str,
+    qty: int,
+    order_type: str = "market",
+    limit_price: Decimal | None = None,
+) -> dict:
+    """
+    Single-leg options order. `option_symbol` must be the real OCC symbol
+    from get_options_chain()'s response — never construct this string by
+    hand. `side` is one of buy_to_open/sell_to_close/buy_to_close/sell_to_open.
+    """
+    api_key, account_id = _creds(conn)
+    base = _base(conn.is_paper)
+
+    form = {
+        "class": "option",
+        "symbol": underlying_symbol,
+        "option_symbol": option_symbol,
+        "side": side,
+        "quantity": str(qty),
+        "type": order_type,
+        "duration": "day",
+    }
+    if order_type == "limit" and limit_price is not None:
+        form["price"] = str(limit_price)
+
+    data = _post_form(base, f"/accounts/{account_id}/orders", api_key, form)
+    order = data.get("order") or {}
+    return {
+        "id": str(order.get("id", "")),
+        "option_symbol": option_symbol,
+        "qty": qty,
+        "side": side,
+        "status": str(order.get("status", "pending")).lower(),
+    }
+
+
 def cancel_order(conn: BrokerConnection, broker_order_id: str) -> None:
     api_key, account_id = _creds(conn)
     base = _base(conn.is_paper)
@@ -322,8 +362,15 @@ def get_latest_quote(conn: BrokerConnection, symbol: str) -> dict:
     }
 
 
-def get_options_chain(conn: BrokerConnection, symbol: str) -> dict:
-    """Returns the chain for the nearest upcoming expiration, with greeks."""
+def get_options_chain(conn: BrokerConnection, symbol: str, target_dte: int | None = None) -> dict:
+    """
+    Returns one expiration's chain, with greeks. Default (target_dte=None)
+    picks the nearest upcoming expiration — that's often only 0-2 days out,
+    fine for a quick look at the Options page. Pass target_dte to pick the
+    expiration closest to today+target_dte instead — needed for anything
+    that actually wants to hold the contract a while (e.g. the options
+    automation staging logic, which targets 7-21 DTE, not tomorrow).
+    """
     api_key, _ = _creds(conn)
     base = _base(conn.is_paper)
 
@@ -331,13 +378,21 @@ def get_options_chain(conn: BrokerConnection, symbol: str) -> dict:
     expirations = _as_list((exp_data.get("expirations") or {}).get("date"))
     if not expirations:
         raise HTTPException(status_code=404, detail=f"No options expirations found for {symbol}")
-    nearest = sorted(expirations)[0]
+
+    if target_dte is None:
+        chosen = sorted(expirations)[0]
+    else:
+        today = dt.date.today()
+        chosen = min(
+            expirations,
+            key=lambda d: abs((dt.date.fromisoformat(d) - today).days - target_dte),
+        )
 
     chain_data = _get(base, "/markets/options/chains", api_key, params={
-        "symbol": symbol, "expiration": nearest, "greeks": "true",
+        "symbol": symbol, "expiration": chosen, "greeks": "true",
     })
     options = _as_list((chain_data.get("options") or {}).get("option"))
-    return {"symbol": symbol, "expiration": nearest, "options": options}
+    return {"symbol": symbol, "expiration": chosen, "options": options}
 
 
 # ── Internal helpers ───────────────────────────────────────────

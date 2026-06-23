@@ -3,12 +3,12 @@ from datetime import datetime, timezone
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Request
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 
 from app.core.audit import log as audit_log
 from app.core.deps import CurrentUser, DB
 from app.core.encryption import decrypt_secret
-from app.models.automation import AutomationConfig, Order
+from app.models.automation import AutomationConfig, OptionsAutomationConfig, Order
 from app.models.broker import BrokerConnection
 from app.models.market import Symbol, Watchlist, WatchlistItem
 from app.models.signal import Signal
@@ -16,7 +16,10 @@ from app.schemas.auth import MessageResponse
 from app.schemas.signal import (
     AutomationConfigRequest,
     AutomationConfigResponse,
+    OptionsAutomationConfigRequest,
+    OptionsAutomationConfigResponse,
     OrderResponse,
+    PendingOptionOrderResponse,
     RankedSignalResponse,
     SignalResponse,
     WatchlistAddRequest,
@@ -25,6 +28,7 @@ from app.services.day_trade_universe import DAY_TRADE_UNIVERSE
 from app.services import market_data as md_svc
 from app.services import signal_engine
 from app.services import notifications as notif_svc
+from app.services import options_execution as opt_exec
 from app.services import options_strategy as opts_svc
 from app.services.broker_adapter import get_adapter
 
@@ -204,29 +208,7 @@ async def get_top_ranked_signals(
     if not symbol_ids:
         return []
 
-    # Latest signal per symbol (not full history — "current best opportunities").
-    latest = (
-        select(Signal.symbol_id, func.max(Signal.created_at).label("max_created"))
-        .where(Signal.symbol_id.in_(symbol_ids))
-        .group_by(Signal.symbol_id)
-        .subquery()
-    )
-
-    result = await db.execute(
-        select(Signal, Symbol)
-        .join(Symbol, Signal.symbol_id == Symbol.id)
-        .join(
-            latest,
-            (Signal.symbol_id == latest.c.symbol_id) & (Signal.created_at == latest.c.max_created),
-        )
-        .where(
-            Signal.signal_type.in_(["BUY", "SELL"]),
-            Signal.entry_price.is_not(None),
-        )
-        .order_by(Signal.confidence.desc())
-        .limit(per_tier * 3)
-    )
-    rows = result.all()
+    rows = await signal_engine.get_ranked_signals(db, symbol_ids, limit=per_tier * 3)
 
     out = []
     for i, (sig, sym) in enumerate(rows):
@@ -450,6 +432,145 @@ async def update_automation_config(
     return config
 
 
+# ── Options automation (paper-trading only, single-leg calls/puts) ──
+
+@router.get("/options-automation", response_model=list[OptionsAutomationConfigResponse])
+async def get_options_automation_configs(current_user: CurrentUser, db: DB):
+    result = await db.execute(
+        select(OptionsAutomationConfig).where(OptionsAutomationConfig.user_id == current_user.id)
+    )
+    return result.scalars().all()
+
+
+@router.post("/options-automation", response_model=OptionsAutomationConfigResponse, status_code=201)
+async def create_options_automation_config(
+    body: OptionsAutomationConfigRequest, request: Request, current_user: CurrentUser, db: DB
+):
+    result = await db.execute(
+        select(BrokerConnection).where(
+            BrokerConnection.id == body.broker_connection_id,
+            BrokerConnection.user_id == current_user.id,
+            BrokerConnection.is_active == True,
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Broker connection not found")
+
+    config = OptionsAutomationConfig(
+        user_id=current_user.id,
+        broker_connection_id=body.broker_connection_id,
+        is_enabled=body.is_enabled,
+        require_manual_approval=body.require_manual_approval,
+        budget_usd=body.budget_usd,
+        min_confidence=body.min_confidence,
+        max_contracts_per_trade=body.max_contracts_per_trade,
+        max_open_positions=body.max_open_positions,
+        target_dte_min=body.target_dte_min,
+        target_dte_max=body.target_dte_max,
+        profit_target_pct=body.profit_target_pct,
+        stop_loss_pct=body.stop_loss_pct,
+    )
+    db.add(config)
+    await db.flush()
+
+    await audit_log(
+        db, action="OPTIONS_AUTOMATION_CREATED", outcome="success",
+        user_id=current_user.id, resource_type="options_automation_config",
+        resource_id=config.id, request=request,
+    )
+    return config
+
+
+@router.patch("/options-automation/{config_id}", response_model=OptionsAutomationConfigResponse)
+async def update_options_automation_config(
+    config_id: uuid.UUID, body: OptionsAutomationConfigRequest, request: Request,
+    current_user: CurrentUser, db: DB,
+):
+    result = await db.execute(
+        select(OptionsAutomationConfig).where(
+            OptionsAutomationConfig.id == config_id,
+            OptionsAutomationConfig.user_id == current_user.id,
+        )
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=404, detail="Options automation config not found")
+
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(config, field, value)
+
+    await audit_log(
+        db, action="OPTIONS_AUTOMATION_UPDATED", outcome="success",
+        user_id=current_user.id, resource_type="options_automation_config",
+        resource_id=config_id, request=request,
+        metadata={"is_enabled": config.is_enabled},
+    )
+    return config
+
+
+@router.get("/options-automation/pending", response_model=list[PendingOptionOrderResponse])
+async def get_pending_option_orders(current_user: CurrentUser, db: DB):
+    result = await db.execute(
+        select(Order).where(
+            Order.user_id == current_user.id,
+            Order.asset_type == "option",
+            Order.status == "pending_approval",
+        ).order_by(Order.created_at.desc())
+    )
+    return result.scalars().all()
+
+
+@router.post("/options-automation/{order_id}/approve", response_model=PendingOptionOrderResponse)
+async def approve_pending_option_order(order_id: uuid.UUID, request: Request, current_user: CurrentUser, db: DB):
+    result = await db.execute(
+        select(Order).where(Order.id == order_id, Order.user_id == current_user.id)
+    )
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.status != "pending_approval":
+        raise HTTPException(status_code=400, detail=f"Order is not pending approval (status={order.status})")
+
+    result = await db.execute(
+        select(BrokerConnection).where(BrokerConnection.id == order.broker_connection_id)
+    )
+    conn = result.scalar_one_or_none()
+    if not conn or not conn.is_active:
+        raise HTTPException(status_code=400, detail="Broker connection is no longer active")
+
+    order = await opt_exec.approve_staged_order(db, conn, order)
+
+    await audit_log(
+        db, action="OPTIONS_ORDER_APPROVED", outcome="success" if order.status == "submitted" else "blocked",
+        user_id=current_user.id, resource_type="order", resource_id=order.id, request=request,
+        metadata={"ticker": order.ticker, "option_symbol": order.option_symbol, "status": order.status},
+    )
+    return order
+
+
+@router.post("/options-automation/{order_id}/reject", response_model=PendingOptionOrderResponse)
+async def reject_pending_option_order(order_id: uuid.UUID, request: Request, current_user: CurrentUser, db: DB):
+    result = await db.execute(
+        select(Order).where(Order.id == order_id, Order.user_id == current_user.id)
+    )
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.status != "pending_approval":
+        raise HTTPException(status_code=400, detail=f"Order is not pending approval (status={order.status})")
+
+    order.status = "cancelled"
+    order.cancelled_at = datetime.now(timezone.utc)
+    order.rejection_reason = "Rejected by user"
+    await db.flush()
+
+    await audit_log(
+        db, action="OPTIONS_ORDER_REJECTED", outcome="success",
+        user_id=current_user.id, resource_type="order", resource_id=order.id, request=request,
+    )
+    return order
+
+
 # ── Orders ─────────────────────────────────────────────────────
 
 @router.get("/orders", response_model=list[OrderResponse])
@@ -513,7 +634,7 @@ async def emergency_stop(request: Request, current_user: CurrentUser, db: DB):
     """
     now = datetime.now(timezone.utc)
 
-    # 1. Disable all automation configs
+    # 1. Disable all automation configs (equity + options)
     result = await db.execute(
         select(AutomationConfig).where(AutomationConfig.user_id == current_user.id)
     )
@@ -524,11 +645,21 @@ async def emergency_stop(request: Request, current_user: CurrentUser, db: DB):
             cfg.is_enabled = False
             configs_disabled += 1
 
-    # 2. Cancel all open orders in DB and attempt broker cancellation
+    result = await db.execute(
+        select(OptionsAutomationConfig).where(OptionsAutomationConfig.user_id == current_user.id)
+    )
+    for cfg in result.scalars().all():
+        if cfg.is_enabled:
+            cfg.is_enabled = False
+            configs_disabled += 1
+
+    # 2. Cancel all open orders in DB and attempt broker cancellation.
+    # pending_approval orders were never sent to the broker — cancelling
+    # them here just stops them from being approved later.
     result = await db.execute(
         select(Order).where(
             Order.user_id == current_user.id,
-            Order.status.in_(["pending", "submitted", "partially_filled"]),
+            Order.status.in_(["pending", "submitted", "partially_filled", "pending_approval"]),
         )
     )
     open_orders = result.scalars().all()

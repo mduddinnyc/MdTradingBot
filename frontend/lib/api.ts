@@ -154,6 +154,21 @@ export const signalApi = {
   emergencyStop: () => api.post("/signals/emergency-stop").then((r) => r.data),
 
   pdtStatus: () => api.get("/signals/pdt-status").then((r) => r.data),
+
+  optionsAutomationList: () => api.get("/signals/options-automation").then((r) => r.data),
+
+  optionsAutomationCreate: (body: object) => api.post("/signals/options-automation", body).then((r) => r.data),
+
+  optionsAutomationUpdate: (id: string, body: object) =>
+    api.patch(`/signals/options-automation/${id}`, body).then((r) => r.data),
+
+  pendingOptionOrders: () => api.get("/signals/options-automation/pending").then((r) => r.data),
+
+  approveOptionOrder: (orderId: string) =>
+    api.post(`/signals/options-automation/${orderId}/approve`).then((r) => r.data),
+
+  rejectOptionOrder: (orderId: string) =>
+    api.post(`/signals/options-automation/${orderId}/reject`).then((r) => r.data),
 };
 
 // ── Analysis ───────────────────────────────────────────────────
