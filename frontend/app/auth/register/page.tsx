@@ -5,11 +5,14 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Link from "next/link";
+import { Eye, EyeOff, UserPlus } from "lucide-react";
 import { authApi } from "@/lib/api";
+import OAuthButtons from "@/components/OAuthButtons";
+import PasswordStrengthChecklist from "@/components/PasswordStrengthChecklist";
 
 const schema = z.object({
   full_name: z.string().min(1, "Required"),
-  email: z.string().email(),
+  email: z.string().min(1, "Email is required").email("Enter a valid email"),
   password: z.string()
     .min(8, "Min 8 chars")
     .regex(/[A-Z]/, "Need uppercase")
@@ -22,10 +25,13 @@ type Form = z.infer<typeof schema>;
 export default function RegisterPage() {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [showPw, setShowPw] = useState(false);
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<Form>({
+  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<Form>({
     resolver: zodResolver(schema),
+    defaultValues: { full_name: "", email: "", password: "" },
   });
+  const password = watch("password");
 
   const onSubmit = async (data: Form) => {
     setError("");
@@ -40,25 +46,48 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="card w-full max-w-sm">
-        <h1 className="text-2xl font-bold mb-6">Create account</h1>
+        <div className="flex items-center gap-2 mb-6">
+          <div className="w-9 h-9 rounded-lg bg-brand/20 flex items-center justify-center">
+            <UserPlus size={18} className="text-brand" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold">Create your account</h1>
+            <p className="text-xs text-gray-400">Start trading with TradingPlatform</p>
+          </div>
+        </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
           <div>
             <label className="label">Full name</label>
-            <input className="input" {...register("full_name")} placeholder="Jane Smith" />
-            {errors.full_name && <p className="text-sell text-xs mt-1">{errors.full_name.message}</p>}
+            <input className="input" {...register("full_name")} placeholder="Jane Smith" autoFocus />
+            {errors.full_name && <p className="text-xs text-sell mt-1">{errors.full_name.message}</p>}
           </div>
 
           <div>
             <label className="label">Email</label>
             <input className="input" type="email" {...register("email")} placeholder="you@example.com" />
-            {errors.email && <p className="text-sell text-xs mt-1">{errors.email.message}</p>}
+            {errors.email && <p className="text-xs text-sell mt-1">{errors.email.message}</p>}
           </div>
 
           <div>
             <label className="label">Password</label>
-            <input className="input" type="password" {...register("password")} placeholder="Min 8 chars, uppercase, digit" />
-            {errors.password && <p className="text-sell text-xs mt-1">{errors.password.message}</p>}
+            <div className="relative">
+              <input
+                className="input pr-10"
+                type={showPw ? "text" : "password"}
+                {...register("password")}
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                tabIndex={-1}
+              >
+                {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <PasswordStrengthChecklist password={password} />
           </div>
 
           {error && <p className="text-sell text-sm">{error}</p>}
@@ -67,6 +96,10 @@ export default function RegisterPage() {
             {isSubmitting ? "Creating…" : "Create account"}
           </button>
         </form>
+
+        <div className="mt-4">
+          <OAuthButtons />
+        </div>
 
         <p className="mt-4 text-sm text-gray-400 text-center">
           Already have an account?{" "}
