@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from app.core.audit import log as audit_log
 from app.core.deps import CurrentUser, DB
@@ -16,6 +16,7 @@ from app.schemas.signal import (
     AutomationConfigRequest,
     AutomationConfigResponse,
     OrderResponse,
+    RankedSignalResponse,
     SignalResponse,
     WatchlistAddRequest,
 )
@@ -154,6 +155,81 @@ async def get_signals(current_user: CurrentUser, db: DB, limit: int = 50):
             model_version=sig.model_version,
             expires_at=sig.expires_at,
             created_at=sig.created_at,
+        ))
+    return out
+
+
+@router.get("/top-ranked", response_model=list[RankedSignalResponse])
+async def get_top_ranked_signals(current_user: CurrentUser, db: DB):
+    """
+    Top 30 actionable opportunities across the user's watchlist, ranked by
+    the signal engine's live confidence score (one row per symbol — its most
+    recent BUY/SELL signal). Tiered by rank position, not a fixed confidence
+    cutoff: positions 1-10 = green, 11-20 = light_green, 21-30 = light_yellow.
+    HOLD signals and rows missing entry/target/stop are excluded — there's
+    no real entry/exit point to show for those.
+    """
+    result = await db.execute(
+        select(Watchlist).where(
+            Watchlist.user_id == current_user.id, Watchlist.is_default == True
+        )
+    )
+    wl = result.scalar_one_or_none()
+    if not wl:
+        return []
+
+    result = await db.execute(
+        select(WatchlistItem.symbol_id).where(WatchlistItem.watchlist_id == wl.id)
+    )
+    symbol_ids = [r[0] for r in result.all()]
+    if not symbol_ids:
+        return []
+
+    # Latest signal per symbol (not full history — "current best opportunities").
+    latest = (
+        select(Signal.symbol_id, func.max(Signal.created_at).label("max_created"))
+        .where(Signal.symbol_id.in_(symbol_ids))
+        .group_by(Signal.symbol_id)
+        .subquery()
+    )
+
+    result = await db.execute(
+        select(Signal, Symbol)
+        .join(Symbol, Signal.symbol_id == Symbol.id)
+        .join(
+            latest,
+            (Signal.symbol_id == latest.c.symbol_id) & (Signal.created_at == latest.c.max_created),
+        )
+        .where(
+            Signal.signal_type.in_(["BUY", "SELL"]),
+            Signal.entry_price.is_not(None),
+        )
+        .order_by(Signal.confidence.desc())
+        .limit(30)
+    )
+    rows = result.all()
+
+    out = []
+    for i, (sig, sym) in enumerate(rows):
+        rank = i + 1
+        tier = "green" if rank <= 10 else "light_green" if rank <= 20 else "light_yellow"
+        out.append(RankedSignalResponse(
+            id=sig.id,
+            symbol=sym.ticker,
+            signal_type=sig.signal_type,
+            confidence=sig.confidence,
+            timeframe=sig.timeframe,
+            entry_price=sig.entry_price,
+            target_price=sig.target_price,
+            stop_price=sig.stop_price,
+            pattern_detected=sig.pattern_detected,
+            indicators=sig.indicators,
+            reasoning=sig.reasoning,
+            model_version=sig.model_version,
+            expires_at=sig.expires_at,
+            created_at=sig.created_at,
+            rank=rank,
+            tier=tier,
         ))
     return out
 

@@ -3,12 +3,64 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { signalApi } from "@/lib/api";
 import { fmtUsd, fmtPct } from "@/lib/utils";
 import SignalBadge from "@/components/SignalBadge";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, TrendingUp, TrendingDown } from "lucide-react";
 import { useState } from "react";
+
+const TIER_META: Record<string, { title: string; sub: string; cls: string; dot: string }> = {
+  green:        { title: "Top Picks",    sub: "Rank 1–10",  cls: "border-buy/40 bg-buy/5",     dot: "bg-buy" },
+  light_green:  { title: "Strong Picks", sub: "Rank 11–20", cls: "border-buy/20 bg-buy/[0.02]", dot: "bg-buy/60" },
+  light_yellow: { title: "Watch List",   sub: "Rank 21–30", cls: "border-hold/30 bg-hold/5",    dot: "bg-hold/70" },
+};
+
+function RankedTierPanel({ tier, rows }: { tier: string; rows: any[] }) {
+  const meta = TIER_META[tier];
+  return (
+    <div className={`card ${meta.cls}`}>
+      <div className="flex items-center gap-2 mb-3">
+        <span className={`w-2 h-2 rounded-full ${meta.dot}`} />
+        <h3 className="font-semibold text-sm">{meta.title}</h3>
+        <span className="text-xs text-gray-500 ml-auto">{meta.sub}</span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-xs text-gray-500 py-4 text-center">No signals in this band yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {rows.map((s) => (
+            <div key={s.id} className="flex items-center gap-2 text-xs py-1.5 border-b border-gray-800/50 last:border-0">
+              <span className="font-mono font-bold w-14 shrink-0">{s.symbol}</span>
+              {s.signal_type === "BUY"
+                ? <TrendingUp size={12} className="text-buy shrink-0" />
+                : <TrendingDown size={12} className="text-sell shrink-0" />}
+              <span className="text-gray-500 w-10 shrink-0">{fmtPct(s.confidence)}</span>
+              <span className="text-gray-400 ml-auto">
+                <span className="text-gray-500">In </span>{s.entry_price ? fmtUsd(s.entry_price) : "—"}
+              </span>
+              <span className="text-buy">
+                <span className="text-gray-500">Out </span>{s.target_price ? fmtUsd(s.target_price) : "—"}
+              </span>
+              <span className="text-sell">
+                <span className="text-gray-500">Stop </span>{s.stop_price ? fmtUsd(s.stop_price) : "—"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SignalsPage() {
   const qc = useQueryClient();
   const [refreshing, setRefreshing] = useState<string | null>(null);
+
+  const { data: ranked = [] } = useQuery({
+    queryKey: ["signals", "top-ranked"],
+    queryFn: () => signalApi.topRanked(),
+    refetchInterval: 1_000,
+  });
+  const greenRows = ranked.filter((s: any) => s.tier === "green");
+  const lightGreenRows = ranked.filter((s: any) => s.tier === "light_green");
+  const lightYellowRows = ranked.filter((s: any) => s.tier === "light_yellow");
 
   const { data: signals = [], isFetching } = useQuery({
     queryKey: ["signals", "all"],
@@ -30,6 +82,19 @@ export default function SignalsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Signals</h1>
         <span className="text-xs text-gray-400">{isFetching ? "Refreshing…" : "Auto-refresh 60s"}</span>
+      </div>
+
+      {/* Top 30 ranked opportunities — watchlist-wide, tiered by confidence rank, 1s refresh */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold">Top Opportunities</h2>
+          <span className="text-xs text-gray-500">Live · refreshes every second</span>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <RankedTierPanel tier="green" rows={greenRows} />
+          <RankedTierPanel tier="light_green" rows={lightGreenRows} />
+          <RankedTierPanel tier="light_yellow" rows={lightYellowRows} />
+        </div>
       </div>
 
       {signals.length === 0 ? (

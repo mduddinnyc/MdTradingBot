@@ -129,6 +129,8 @@ export const brokerApi = {
 export const signalApi = {
   list: (limit = 50) => api.get("/signals/", { params: { limit } }).then((r) => r.data),
 
+  topRanked: () => api.get("/signals/top-ranked").then((r) => r.data),
+
   refresh: (ticker: string) => api.post(`/signals/refresh/${ticker}`).then((r) => r.data),
 
   watchlist: () => api.get("/signals/watchlist").then((r) => r.data),

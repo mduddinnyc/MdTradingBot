@@ -23,6 +23,11 @@ class SignalResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class RankedSignalResponse(SignalResponse):
+    rank: int           # 1-based position in the top-30 list
+    tier: str           # "green" | "light_green" | "light_yellow"
+
+
 class WatchlistAddRequest(BaseModel):
     ticker: str
 
