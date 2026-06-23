@@ -74,12 +74,22 @@ class OrderResponse(BaseModel):
     status: str
     is_automated: bool
     rejection_reason: str | None
+    asset_type: str
+    option_right: str | None
     avg_fill_price: float | None
     stop_price: float | None
     take_profit_price: float | None
     submitted_at: datetime | None
     filled_at: datetime | None
     created_at: datetime
+
+    # Realized P&L — populated only when Tradier's own closed-position
+    # ledger has a matching exit. Never fabricated: stays null until a
+    # real closing fill is found. See get_orders() in api/signals.py.
+    exit_price: float | None = None
+    closed_at: datetime | None = None
+    pnl_usd: float | None = None
+    pnl_pct: float | None = None
 
     model_config = {"from_attributes": True}
 

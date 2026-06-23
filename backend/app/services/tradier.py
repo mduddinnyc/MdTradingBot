@@ -19,6 +19,7 @@ Bracket orders use Tradier's native `class=otoco` (one-triggers-one-cancels-othe
 from __future__ import annotations
 
 import datetime as dt
+import re
 from decimal import Decimal
 
 import httpx
@@ -30,6 +31,15 @@ from app.models.broker import BrokerConnection
 _SANDBOX = "https://sandbox.tradier.com/v1"
 _LIVE    = "https://api.tradier.com/v1"
 _TIMEOUT = 15
+
+_OCC_OPTION_RE = re.compile(r"^[A-Z]{1,6}\d{6}[CP]\d{8}$")
+
+
+def _is_option_symbol(symbol: str) -> bool:
+    """OCC symbols carry a 100x multiplier (1 contract = 100 shares) that
+    equity symbols don't — needed wherever we convert Tradier's aggregate
+    cost_basis/market_value into a per-share/per-contract price."""
+    return bool(_OCC_OPTION_RE.match(symbol))
 
 
 def _base(paper: bool) -> str:
@@ -145,7 +155,8 @@ def get_positions(conn: BrokerConnection) -> list[dict]:
         symbol = p.get("symbol", "")
         qty = float(p.get("quantity", 0))
         cost_basis = float(p.get("cost_basis", 0))
-        avg = cost_basis / qty if qty else 0.0
+        multiplier = 100 if _is_option_symbol(symbol) else 1
+        avg = cost_basis / (qty * multiplier) if qty else 0.0
 
         # Tradier positions don't include live price — fetch quote
         current = avg
@@ -159,7 +170,7 @@ def get_positions(conn: BrokerConnection) -> list[dict]:
         except HTTPException:
             pass
 
-        market_val = qty * current
+        market_val = qty * current * multiplier
         pl = market_val - cost_basis
         result.append({
             "symbol": symbol,
@@ -170,6 +181,49 @@ def get_positions(conn: BrokerConnection) -> list[dict]:
             "unrealized_pl": str(pl),
             "unrealized_plpc": str(pl / cost_basis if cost_basis else 0),
             "side": "long" if qty > 0 else "short",
+        })
+    return result
+
+
+def get_gain_loss(conn: BrokerConnection, start: str | None = None, end: str | None = None) -> list[dict]:
+    """
+    Realized P&L for closed positions, straight from Tradier's own
+    cost-basis ledger — the only honest source of exit prices and
+    profit/loss since we don't track closing fills ourselves yet.
+    Entry/exit are normalized to per-share (equity) or per-contract
+    (option) price; Tradier's cost/proceeds are aggregate dollar totals.
+    `gain_loss_pct` is a 0-1 fraction (matches this app's confidence/pct
+    convention), not Tradier's raw whole-number percent.
+    """
+    api_key, account_id = _creds(conn)
+    base = _base(conn.is_paper)
+    params: dict = {}
+    if start:
+        params["start"] = start
+    if end:
+        params["end"] = end
+    data = _get(base, f"/accounts/{account_id}/gainloss", api_key, params=params)
+    gl = data.get("gainloss")
+    if not isinstance(gl, dict):
+        return []
+
+    result = []
+    for r in _as_list(gl.get("closed_position")):
+        symbol = r.get("symbol", "")
+        qty = abs(float(r.get("quantity", 0) or 0))
+        denom = qty * (100 if _is_option_symbol(symbol) else 1)
+        cost = float(r.get("cost", 0) or 0)
+        proceeds = float(r.get("proceeds", 0) or 0)
+        result.append({
+            "symbol": symbol,
+            "quantity": qty,
+            "open_date": r.get("open_date"),
+            "close_date": r.get("close_date"),
+            "entry_price": round(cost / denom, 4) if denom else None,
+            "exit_price": round(proceeds / denom, 4) if denom else None,
+            "gain_loss": round(float(r.get("gain_loss", 0) or 0), 2),
+            "gain_loss_pct": round(float(r.get("gain_loss_percent", 0) or 0) / 100, 4),
+            "term": r.get("term"),
         })
     return result
 

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Request
@@ -33,6 +33,17 @@ from app.services import options_strategy as opts_svc
 from app.services.broker_adapter import get_adapter
 
 router = APIRouter(prefix="/signals", tags=["signals"])
+
+_ORDER_HISTORY_RANGE_DAYS = {"7d": 7, "30d": 30, "1y": 365}
+
+
+def _parse_broker_date(s: str | None) -> datetime | None:
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 # ── Watchlist ──────────────────────────────────────────────────
@@ -574,14 +585,54 @@ async def reject_pending_option_order(order_id: uuid.UUID, request: Request, cur
 # ── Orders ─────────────────────────────────────────────────────
 
 @router.get("/orders", response_model=list[OrderResponse])
-async def get_orders(current_user: CurrentUser, db: DB, limit: int = 100):
+async def get_orders(current_user: CurrentUser, db: DB, limit: int = 100, period: str = "all"):
+    """
+    Order audit log, optionally enriched with realized entry/exit/P&L for
+    orders Tradier's own closed-position ledger confirms were closed.
+    We don't track closing fills ourselves yet, so exit/P&L stay null for
+    anything that ledger doesn't corroborate — never estimated locally.
+    """
+    query = select(Order).where(Order.user_id == current_user.id)
+    since = None
+    if period in _ORDER_HISTORY_RANGE_DAYS:
+        since = datetime.now(timezone.utc) - timedelta(days=_ORDER_HISTORY_RANGE_DAYS[period])
+        query = query.where(Order.created_at >= since)
+
+    result = await db.execute(query.order_by(Order.created_at.desc()).limit(limit))
+    orders = result.scalars().all()
+    responses = [OrderResponse.model_validate(o) for o in orders]
+
     result = await db.execute(
-        select(Order)
-        .where(Order.user_id == current_user.id)
-        .order_by(Order.created_at.desc())
-        .limit(limit)
+        select(BrokerConnection).where(
+            BrokerConnection.user_id == current_user.id, BrokerConnection.is_active == True
+        )
     )
-    return result.scalars().all()
+    conn = result.scalars().first()
+    adapter = get_adapter(conn.broker_name) if conn else None
+
+    if conn and hasattr(adapter, "get_gain_loss"):
+        try:
+            closed = adapter.get_gain_loss(conn, start=since.strftime("%Y-%m-%d") if since else None)
+        except Exception:
+            closed = []
+
+        # Greedy nearest-date match per symbol — good enough for a single
+        # account's history; doesn't try to be a precise lot-accounting system.
+        unmatched = list(closed)
+        for resp, order in zip(responses, orders):
+            symbol = order.option_symbol if order.asset_type == "option" else order.ticker
+            open_ref = (order.filled_at or order.submitted_at or order.created_at).replace(tzinfo=None)
+            candidates = [c for c in unmatched if c["symbol"] == symbol and c.get("open_date")]
+            if not candidates:
+                continue
+            best = min(candidates, key=lambda c: abs((_parse_broker_date(c["open_date"]).replace(tzinfo=None) - open_ref).days))
+            resp.exit_price = best["exit_price"]
+            resp.closed_at = _parse_broker_date(best["close_date"])
+            resp.pnl_usd = best["gain_loss"]
+            resp.pnl_pct = best["gain_loss_pct"]
+            unmatched.remove(best)
+
+    return responses
 
 
 # ── PDT status ─────────────────────────────────────────────────
