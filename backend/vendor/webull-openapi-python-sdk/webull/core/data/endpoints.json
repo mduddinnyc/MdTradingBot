@@ -1,0 +1,66 @@
+{
+    "default_region": "us",
+    "regions": ["us", "hk", "jp", "sg", "th", "au", "my", "uk", "br", "mx", "za", "eu"],
+    "region_mapping": {
+        "us": {
+            "api": "api.webull.com",
+            "quotes-api": "data-api.webull.com",
+            "events-api": "events-api.webull.com"
+        },
+        "hk": {
+            "api": "api.webull.hk",
+            "quotes-api": "data-api.webull.hk",
+            "events-api": "events-api.webull.hk"
+        },
+        "jp": {
+            "api": "api.webull.co.jp",
+            "quotes-api": "data-api.webull.co.jp",
+            "events-api": "events-api.webull.co.jp"
+        },
+        "sg": {
+            "api": "api.webull.com.sg",
+            "quotes-api": "data-api.webull.com.sg",
+            "events-api": "events-api.webull.com.sg"
+        },
+        "th": {
+            "api": "api.webull.co.th",
+            "quotes-api": "data-api.webull.co.th",
+            "events-api": "events-api.webull.co.th"
+        },
+        "au": {
+            "api": "api.webull.com.au",
+            "quotes-api": "data-api.webull.com.au",
+            "events-api": "events-api.webull.com.au"
+        },
+        "my": {
+            "api": "api.webull.com.my",
+            "quotes-api": "data-api.webull.com.my",
+            "events-api": "events-api.webull.com.my"
+        },
+        "uk": {
+            "api": "api.webull-uk.com",
+            "quotes-api": "data-api.webull-uk.com",
+            "events-api": "events-api.webull-uk.com"
+        },
+        "br": {
+            "api": "api.webull.com",
+            "quotes-api": "data-api.webull.com",
+            "events-api": "events-api.webull.com"
+        },
+        "mx": {
+            "api": "api.webull.com",
+            "quotes-api": "data-api.webull.com",
+            "events-api": "events-api.webull.com"
+        },
+        "za": {
+            "api": "api.webull.com.au",
+            "quotes-api": "data-api.webull.com.au",
+            "events-api": "events-api.webull.com.au"
+        },
+        "eu": {
+            "api": "api.webull.eu",
+            "quotes-api": "data-api.webull.eu",
+            "events-api": "events-api.webull.eu"
+        }
+    }
+}

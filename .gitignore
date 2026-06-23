@@ -1,0 +1,7 @@
+.claude/
+backend/conf/
+backend/.env
+backend/**/__pycache__/
+frontend/node_modules/
+frontend/.next/
+*.pyc

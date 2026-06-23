@@ -1,0 +1,426 @@
+281473696175296 2026-06-20 22:06:13,420 webull.core.client ERROR ServerException occurred. Host:us-openapi-alb.uat.webullbroker.com SDK-Version:2.0.11 Request:{
+  "_version": "v2",
+  "_action_name": "/openapi/config",
+  "_protocol_type": "https",
+  "_accept_format": "JSON",
+  "_params": {},
+  "_method": "GET",
+  "_header": {
+    "x-version": "v2",
+    "Accept-Encoding": "gzip",
+    "x-app-key": "6c90f187de7320c8d81a8b70e292bd26",
+    "x-timestamp": "2026-06-20T22:06:12Z",
+    "x-signature-version": "1.0",
+    "x-signature-algorithm": "HMAC-SHA1",
+    "x-signature-nonce": "95a89740-bc40-5b8e-bead-a5f1cdbd1228",
+    "x-signature": "rrmCVJcvIFO7CMWpoZTiRUrztMA=",
+    "User-Agent": "WebullApiSDK (Linux 6.12.76-linuxkit;aarch64) Python/3.12.13 Core/2.0.11 python-requests/2.34.2",
+    "x-webull-client-source": "sdk"
+  },
+  "_body_params": null,
+  "_uri_pattern": null,
+  "_uri_params": null,
+  "_content": null,
+  "_extra_user_agent": {},
+  "string_to_sign": "",
+  "_request_connect_timeout": null,
+  "_request_read_timeout": null,
+  "endpoint": "us-openapi-alb.uat.webullbroker.com",
+  "_signer_spec": "<module 'webull.core.auth.algorithm.sha_hmac1' from '/usr/local/lib/python3.12/site-packages/webull/core/auth/algorithm/sha_hmac1.py'>"
+} Response:{'error_code': 'UNAUTHORIZED'} ServerException:HTTP Status: 401, Code: UNAUTHORIZED, Msg: , RequestID: 54e270c8-f805-4e8c-9f07-2aca62f9f184
+281473696175296 2026-06-20 22:06:13,420 webull.core.client ERROR get_response exception. {
+  "error_code": "UNAUTHORIZED",
+  "error_msg": "",
+  "http_status": 401,
+  "request_id": "54e270c8-f805-4e8c-9f07-2aca62f9f184"
+}
+281472949437632 2026-06-20 22:07:10,474 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281472949437632 2026-06-20 22:07:10,475 webull.core.http.initializer.token.token_storage INFO storage_token uses the default configuration, conf.
+281472949437632 2026-06-20 22:07:10,476 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/token.txt.
+281472949437632 2026-06-20 22:07:10,476 webull.core.http.initializer.token.token_manager INFO load_token_from_local file not exists, file:/app/conf/token.txt.
+281472949437632 2026-06-20 22:07:10,857 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:02c18a******4436fd expires:1781993590623 status:PENDING
+281472949437632 2026-06-20 22:07:10,858 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server started check_token loop. token:02c18a******4436fd duration_seconds:300 interval_seconds:5
+281472949437632 2026-06-20 22:07:10,966 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:02c18a******4436fd expires:1781993590623 status:PENDING
+281472949437632 2026-06-20 22:07:10,966 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 0s / 300s). For more details, please visit the OpenAPI official website.
+281472949437632 2026-06-20 22:07:15,962 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:02c18a******4436fd expires:1781993590623 status:PENDING
+281472949437632 2026-06-20 22:07:15,962 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 5s / 300s). For more details, please visit the OpenAPI official website.
+281472949437632 2026-06-20 22:07:20,966 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:02c18a******4436fd expires:1781993590623 status:PENDING
+281472949437632 2026-06-20 22:07:20,967 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 10s / 300s). For more details, please visit the OpenAPI official website.
+281472949437632 2026-06-20 22:07:25,968 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:02c18a******4436fd expires:1781993590623 status:PENDING
+281472949437632 2026-06-20 22:07:25,970 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 15s / 300s). For more details, please visit the OpenAPI official website.
+281472949437632 2026-06-20 22:07:31,031 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:02c18a******4436fd expires:1781993590623 status:PENDING
+281472949437632 2026-06-20 22:07:31,032 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 20s / 300s). For more details, please visit the OpenAPI official website.
+281472949437632 2026-06-20 22:07:35,980 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:02c18a******4436fd expires:1781993590623 status:PENDING
+281472949437632 2026-06-20 22:07:35,980 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 25s / 300s). For more details, please visit the OpenAPI official website.
+281472949437632 2026-06-20 22:07:41,032 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:02c18a******4436fd expires:1781993590623 status:PENDING
+281472949437632 2026-06-20 22:07:41,032 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 30s / 300s). For more details, please visit the OpenAPI official website.
+281472949437632 2026-06-20 22:07:45,977 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:02c18a******4436fd expires:1781993590623 status:PENDING
+281472949437632 2026-06-20 22:07:45,977 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 35s / 300s). For more details, please visit the OpenAPI official website.
+281472949437632 2026-06-20 22:07:51,035 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:02c18a******4436fd expires:1781993590623 status:PENDING
+281472949437632 2026-06-20 22:07:51,035 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 40s / 300s). For more details, please visit the OpenAPI official website.
+281472949437632 2026-06-20 22:07:56,009 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:02c18a******4436fd expires:1781993590623 status:PENDING
+281472949437632 2026-06-20 22:07:56,010 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 45s / 300s). For more details, please visit the OpenAPI official website.
+281472949437632 2026-06-20 22:08:01,004 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281472949437632 2026-06-20 22:08:01,005 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server check_token status is verified, no further check required, returning directly. token:02c18a******4436fd expires:1781993590623 status:PENDING
+281472949437632 2026-06-20 22:08:01,006 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281472949437632 2026-06-20 22:08:01,008 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281472949437632 2026-06-20 22:08:01,008 webull.core.http.initializer.token.token_manager INFO init_token finished. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281473235961024 2026-06-20 22:09:53,818 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473235961024 2026-06-20 22:09:53,819 webull.core.http.initializer.token.token_storage INFO storage_token uses the default configuration, conf.
+281473235961024 2026-06-20 22:09:53,819 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/token.txt.
+281473235961024 2026-06-20 22:09:53,820 webull.core.http.initializer.token.token_storage WARNING storage_token Note: The token file already exists, the latest token configuration will be overwritten and written to the token file after successful 2FA verification. path:/app/conf/token.txt.
+281473235961024 2026-06-20 22:09:53,820 webull.core.http.initializer.token.token_manager INFO load_token_from_local reading token from file...
+281473235961024 2026-06-20 22:09:53,820 webull.core.http.initializer.token.token_manager INFO load_token_from_local read local token result. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281473235961024 2026-06-20 22:09:53,904 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281473235961024 2026-06-20 22:09:53,905 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token status is verified, no further check required, returning directly. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281473235961024 2026-06-20 22:09:53,905 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281473235961024 2026-06-20 22:09:53,906 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281473235961024 2026-06-20 22:09:53,906 webull.core.http.initializer.token.token_manager INFO init_token finished. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281473235961024 2026-06-20 22:09:54,433 webull.core.client ERROR ServerException occurred. Host:api.webull.com SDK-Version:2.0.11 Request:{
+  "_version": "v2",
+  "_action_name": "/openapi/trade/order/history",
+  "_protocol_type": "https",
+  "_accept_format": "JSON",
+  "_params": {
+    "account_id": "R1ISCFPMDLHA37DPDOCANUCFSA",
+    "page_size": 5
+  },
+  "_method": "GET",
+  "_header": {
+    "x-version": "v2",
+    "Accept-Encoding": "gzip",
+    "x-app-key": "6c90f187de7320c8d81a8b70e292bd26",
+    "x-timestamp": "2026-06-20T22:09:54Z",
+    "x-signature-version": "1.0",
+    "x-signature-algorithm": "HMAC-SHA1",
+    "x-signature-nonce": "65c330f5-241f-5a07-92e1-26091c60ced9",
+    "x-signature": "X7jNCzy64syytyTb43y+YoEiO5M=",
+    "User-Agent": "WebullApiSDK (Linux 6.12.76-linuxkit;aarch64) Python/3.12.13 Core/2.0.11 python-requests/2.34.2",
+    "x-access-token": "02c18acdc28340169909dd45df4436fd",
+    "x-webull-client-source": "sdk"
+  },
+  "_body_params": null,
+  "_uri_pattern": null,
+  "_uri_params": null,
+  "_content": null,
+  "_extra_user_agent": {},
+  "string_to_sign": "",
+  "_request_connect_timeout": null,
+  "_request_read_timeout": null,
+  "endpoint": "api.webull.com",
+  "_signer_spec": "<module 'webull.core.auth.algorithm.sha_hmac1' from '/usr/local/lib/python3.12/site-packages/webull/core/auth/algorithm/sha_hmac1.py'>"
+} Response:{'message': 'Parameter error, invalid page_size, value: 5, value should be between 10 and 100', 'error_code': 'OAUTH_OPENAPI_PARAM_ERR'} ServerException:HTTP Status: 417, Code: OAUTH_OPENAPI_PARAM_ERR, Msg: Parameter error, invalid page_size, value: 5, value should be between 10 and 100, RequestID: 11b02a09-a429-41c1-acbc-634b077eee04
+281473235961024 2026-06-20 22:09:54,434 webull.core.client ERROR get_response exception. {
+  "error_code": "OAUTH_OPENAPI_PARAM_ERR",
+  "error_msg": "Parameter error, invalid page_size, value: 5, value should be between 10 and 100",
+  "http_status": 417,
+  "request_id": "11b02a09-a429-41c1-acbc-634b077eee04"
+}
+281472909186240 2026-06-20 22:10:16,004 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281472909186240 2026-06-20 22:10:16,005 webull.core.http.initializer.token.token_storage INFO storage_token uses the default configuration, conf.
+281472909186240 2026-06-20 22:10:16,006 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/token.txt.
+281472909186240 2026-06-20 22:10:16,006 webull.core.http.initializer.token.token_storage WARNING storage_token Note: The token file already exists, the latest token configuration will be overwritten and written to the token file after successful 2FA verification. path:/app/conf/token.txt.
+281472909186240 2026-06-20 22:10:16,006 webull.core.http.initializer.token.token_manager INFO load_token_from_local reading token from file...
+281472909186240 2026-06-20 22:10:16,006 webull.core.http.initializer.token.token_manager INFO load_token_from_local read local token result. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281472909186240 2026-06-20 22:10:16,092 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281472909186240 2026-06-20 22:10:16,092 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token status is verified, no further check required, returning directly. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281472909186240 2026-06-20 22:10:16,093 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281472909186240 2026-06-20 22:10:16,093 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281472909186240 2026-06-20 22:10:16,093 webull.core.http.initializer.token.token_manager INFO init_token finished. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281472909186240 2026-06-20 22:10:16,442 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281472909186240 2026-06-20 22:10:16,443 webull.core.http.initializer.token.token_storage INFO storage_token uses the default configuration, conf.
+281472909186240 2026-06-20 22:10:16,444 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/token.txt.
+281472909186240 2026-06-20 22:10:16,444 webull.core.http.initializer.token.token_storage WARNING storage_token Note: The token file already exists, the latest token configuration will be overwritten and written to the token file after successful 2FA verification. path:/app/conf/token.txt.
+281472909186240 2026-06-20 22:10:16,444 webull.core.http.initializer.token.token_manager INFO load_token_from_local reading token from file...
+281472909186240 2026-06-20 22:10:16,444 webull.core.http.initializer.token.token_manager INFO load_token_from_local read local token result. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281472909186240 2026-06-20 22:10:16,527 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281472909186240 2026-06-20 22:10:16,528 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token status is verified, no further check required, returning directly. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281472909186240 2026-06-20 22:10:16,529 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281472909186240 2026-06-20 22:10:16,529 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281472909186240 2026-06-20 22:10:16,530 webull.core.http.initializer.token.token_manager INFO init_token finished. token:02c18a******4436fd expires:1783289280096 status:NORMAL
+281472909186240 2026-06-20 22:10:16,707 webull.core.client ERROR ServerException occurred. Host:api.webull.com SDK-Version:2.0.11 Request:{
+  "_version": "v2",
+  "_action_name": "/openapi/market-data/stock/snapshot",
+  "_protocol_type": "https",
+  "_accept_format": "JSON",
+  "_params": {
+    "symbols": "AAPL",
+    "category": "US_STOCK"
+  },
+  "_method": "GET",
+  "_header": {
+    "x-version": "v2",
+    "Accept-Encoding": "gzip",
+    "x-app-key": "6c90f187de7320c8d81a8b70e292bd26",
+    "x-timestamp": "2026-06-20T22:10:16Z",
+    "x-signature-version": "1.0",
+    "x-signature-algorithm": "HMAC-SHA1",
+    "x-signature-nonce": "56400baf-539f-5569-8c73-aaae7b99f38e",
+    "x-signature": "DVykYbnpkqXGqSeh1tL86wqoIxg=",
+    "User-Agent": "WebullApiSDK (Linux 6.12.76-linuxkit;aarch64) Python/3.12.13 Core/2.0.11 python-requests/2.34.2",
+    "x-access-token": "02c18acdc28340169909dd45df4436fd",
+    "x-webull-client-source": "sdk"
+  },
+  "_body_params": null,
+  "_uri_pattern": null,
+  "_uri_params": null,
+  "_content": null,
+  "_extra_user_agent": {},
+  "string_to_sign": "",
+  "_request_connect_timeout": null,
+  "_request_read_timeout": null,
+  "endpoint": "api.webull.com",
+  "_signer_spec": "<module 'webull.core.auth.algorithm.sha_hmac1' from '/usr/local/lib/python3.12/site-packages/webull/core/auth/algorithm/sha_hmac1.py'>"
+} Response:{'error_code': 'Unauthorized', 'message': 'Insufficient permission, please subscribe to stock quotes.', 'status': 401} ServerException:HTTP Status: 401, Code: Unauthorized, Msg: Insufficient permission, please subscribe to stock quotes., RequestID: 70fc34dc-75ac-4269-9c19-51cdbfdc158a
+281472909186240 2026-06-20 22:10:16,708 webull.core.client ERROR get_response exception. {
+  "error_code": "Unauthorized",
+  "error_msg": "Insufficient permission, please subscribe to stock quotes.",
+  "http_status": 401,
+  "request_id": "70fc34dc-75ac-4269-9c19-51cdbfdc158a"
+}
+281473463702720 2026-06-20 22:13:41,987 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473463702720 2026-06-20 22:13:41,988 webull.core.http.initializer.token.token_storage INFO storage_token uses the custom configuration, token_dir:/app/conf/webull_tokens/pending-a170229037b64a0c92f714f36181cba3.
+281473463702720 2026-06-20 22:13:41,988 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/webull_tokens/pending-a170229037b64a0c92f714f36181cba3/token.txt.
+281473463702720 2026-06-20 22:13:41,989 webull.core.http.initializer.token.token_manager INFO load_token_from_local file not exists, file:/app/conf/webull_tokens/pending-a170229037b64a0c92f714f36181cba3/token.txt.
+281473463702720 2026-06-20 22:13:42,260 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:f5123f******b44e06 expires:1781993982074 status:PENDING
+281473463702720 2026-06-20 22:13:42,263 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server started check_token loop. token:f5123f******b44e06 duration_seconds:60 interval_seconds:5
+281473463702720 2026-06-20 22:13:42,353 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:f5123f******b44e06 expires:1781993982074 status:PENDING
+281473463702720 2026-06-20 22:13:42,354 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 0s / 60s). For more details, please visit the OpenAPI official website.
+281473463702720 2026-06-20 22:13:47,393 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:f5123f******b44e06 expires:1781993982074 status:PENDING
+281473463702720 2026-06-20 22:13:47,393 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 5s / 60s). For more details, please visit the OpenAPI official website.
+281473463702720 2026-06-20 22:13:52,368 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:f5123f******b44e06 expires:1781993982074 status:PENDING
+281473463702720 2026-06-20 22:13:52,369 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 10s / 60s). For more details, please visit the OpenAPI official website.
+281473463702720 2026-06-20 22:13:57,437 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:f5123f******b44e06 expires:1783289636259 status:NORMAL
+281473463702720 2026-06-20 22:13:57,438 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server check_token status is verified, no further check required, returning directly. token:f5123f******b44e06 expires:1781993982074 status:PENDING
+281473463702720 2026-06-20 22:13:57,439 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:f5123f******b44e06 expires:1783289636259 status:NORMAL
+281473463702720 2026-06-20 22:13:57,441 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281473463702720 2026-06-20 22:13:57,441 webull.core.http.initializer.token.token_manager INFO init_token finished. token:f5123f******b44e06 expires:1783289636259 status:NORMAL
+281473463702720 2026-06-20 22:13:57,635 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473463702720 2026-06-20 22:13:57,635 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473463702720 2026-06-20 22:13:57,637 webull.core.http.initializer.token.token_storage INFO storage_token uses the custom configuration, token_dir:/app/conf/webull_tokens/a73a138c-85f8-4e40-97e6-6b71744816cb.
+281473463702720 2026-06-20 22:13:57,637 webull.core.http.initializer.token.token_storage INFO storage_token uses the custom configuration, token_dir:/app/conf/webull_tokens/a73a138c-85f8-4e40-97e6-6b71744816cb.
+281473463702720 2026-06-20 22:13:57,638 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/webull_tokens/a73a138c-85f8-4e40-97e6-6b71744816cb/token.txt.
+281473463702720 2026-06-20 22:13:57,638 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/webull_tokens/a73a138c-85f8-4e40-97e6-6b71744816cb/token.txt.
+281473463702720 2026-06-20 22:13:57,639 webull.core.http.initializer.token.token_manager INFO load_token_from_local file not exists, file:/app/conf/webull_tokens/a73a138c-85f8-4e40-97e6-6b71744816cb/token.txt.
+281473463702720 2026-06-20 22:13:57,639 webull.core.http.initializer.token.token_manager INFO load_token_from_local file not exists, file:/app/conf/webull_tokens/a73a138c-85f8-4e40-97e6-6b71744816cb/token.txt.
+281473463702720 2026-06-20 22:13:57,809 webull.core.client ERROR ServerException occurred. Host:api.webull.com SDK-Version:2.0.11 Request:{
+  "_version": "v2",
+  "_action_name": "/openapi/auth/token/create",
+  "_protocol_type": "https",
+  "_accept_format": "JSON",
+  "_params": {},
+  "_method": "POST",
+  "_header": {
+    "x-version": "v2",
+    "Accept-Encoding": "gzip",
+    "x-app-key": "6c90f187de7320c8d81a8b70e292bd26",
+    "x-timestamp": "2026-06-20T22:13:57Z",
+    "x-signature-version": "1.0",
+    "x-signature-algorithm": "HMAC-SHA1",
+    "x-signature-nonce": "2a5ef2cb-544e-5d83-b630-40cb95d38f8b",
+    "x-signature": "+bvMR3EryJJSHYODq43cD3Y0bc0=",
+    "User-Agent": "WebullApiSDK (Linux 6.12.76-linuxkit;aarch64) Python/3.12.13 Core/2.0.11 python-requests/2.34.2",
+    "x-webull-client-source": "sdk",
+    "Content-Length": "2",
+    "Content-Type": "application/json"
+  },
+  "_body_params": {},
+  "_uri_pattern": null,
+  "_uri_params": null,
+  "_content": "{}",
+  "_extra_user_agent": {},
+  "string_to_sign": "",
+  "_request_connect_timeout": null,
+  "_request_read_timeout": null,
+  "endpoint": "api.webull.com",
+  "_signer_spec": "<module 'webull.core.auth.algorithm.sha_hmac1' from '/usr/local/lib/python3.12/site-packages/webull/core/auth/algorithm/sha_hmac1.py'>"
+} Response:{'error_code': '2FA_VERIFY_FAILED', 'message': 'start 2FA verification failed.', 'status': 417} ServerException:HTTP Status: 417, Code: 2FA_VERIFY_FAILED, Msg: start 2FA verification failed., RequestID: bd9f45a9-0958-4d4c-9ff4-4f88130eca9f
+281473463702720 2026-06-20 22:13:57,809 webull.core.client ERROR ServerException occurred. Host:api.webull.com SDK-Version:2.0.11 Request:{
+  "_version": "v2",
+  "_action_name": "/openapi/auth/token/create",
+  "_protocol_type": "https",
+  "_accept_format": "JSON",
+  "_params": {},
+  "_method": "POST",
+  "_header": {
+    "x-version": "v2",
+    "Accept-Encoding": "gzip",
+    "x-app-key": "6c90f187de7320c8d81a8b70e292bd26",
+    "x-timestamp": "2026-06-20T22:13:57Z",
+    "x-signature-version": "1.0",
+    "x-signature-algorithm": "HMAC-SHA1",
+    "x-signature-nonce": "2a5ef2cb-544e-5d83-b630-40cb95d38f8b",
+    "x-signature": "+bvMR3EryJJSHYODq43cD3Y0bc0=",
+    "User-Agent": "WebullApiSDK (Linux 6.12.76-linuxkit;aarch64) Python/3.12.13 Core/2.0.11 python-requests/2.34.2",
+    "x-webull-client-source": "sdk",
+    "Content-Length": "2",
+    "Content-Type": "application/json"
+  },
+  "_body_params": {},
+  "_uri_pattern": null,
+  "_uri_params": null,
+  "_content": "{}",
+  "_extra_user_agent": {},
+  "string_to_sign": "",
+  "_request_connect_timeout": null,
+  "_request_read_timeout": null,
+  "endpoint": "api.webull.com",
+  "_signer_spec": "<module 'webull.core.auth.algorithm.sha_hmac1' from '/usr/local/lib/python3.12/site-packages/webull/core/auth/algorithm/sha_hmac1.py'>"
+} Response:{'error_code': '2FA_VERIFY_FAILED', 'message': 'start 2FA verification failed.', 'status': 417} ServerException:HTTP Status: 417, Code: 2FA_VERIFY_FAILED, Msg: start 2FA verification failed., RequestID: bd9f45a9-0958-4d4c-9ff4-4f88130eca9f
+281473463702720 2026-06-20 22:13:57,810 webull.core.client ERROR get_response exception. {
+  "error_code": "2FA_VERIFY_FAILED",
+  "error_msg": "start 2FA verification failed.",
+  "http_status": 417,
+  "request_id": "bd9f45a9-0958-4d4c-9ff4-4f88130eca9f"
+}
+281473463702720 2026-06-20 22:13:57,810 webull.core.client ERROR get_response exception. {
+  "error_code": "2FA_VERIFY_FAILED",
+  "error_msg": "start 2FA verification failed.",
+  "http_status": 417,
+  "request_id": "bd9f45a9-0958-4d4c-9ff4-4f88130eca9f"
+}
+281473410868416 2026-06-20 22:15:03,227 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473410868416 2026-06-20 22:15:03,227 webull.core.http.initializer.token.token_storage INFO storage_token uses the custom configuration, token_dir:/app/conf/webull_tokens/29751cbcdd928c4edaf97786.
+281473410868416 2026-06-20 22:15:03,228 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473410868416 2026-06-20 22:15:03,228 webull.core.http.initializer.token.token_manager INFO load_token_from_local file not exists, file:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473410868416 2026-06-20 22:15:03,548 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:15:03,550 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server started check_token loop. token:a28eff******489f49 duration_seconds:60 interval_seconds:5
+281473410868416 2026-06-20 22:15:03,660 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:15:03,661 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 0s / 60s). For more details, please visit the OpenAPI official website.
+281473410868416 2026-06-20 22:15:08,655 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:15:08,655 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 5s / 60s). For more details, please visit the OpenAPI official website.
+281473410868416 2026-06-20 22:15:13,660 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:15:13,661 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 10s / 60s). For more details, please visit the OpenAPI official website.
+281473410868416 2026-06-20 22:15:18,733 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:15:18,734 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 15s / 60s). For more details, please visit the OpenAPI official website.
+281473410868416 2026-06-20 22:15:23,669 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:15:23,670 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 20s / 60s). For more details, please visit the OpenAPI official website.
+281473410868416 2026-06-20 22:15:28,802 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:15:28,802 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 25s / 60s). For more details, please visit the OpenAPI official website.
+281473410868416 2026-06-20 22:15:33,680 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:15:33,680 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 30s / 60s). For more details, please visit the OpenAPI official website.
+281473410868416 2026-06-20 22:15:38,704 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:15:38,704 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 35s / 60s). For more details, please visit the OpenAPI official website.
+281473410868416 2026-06-20 22:15:43,672 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:15:43,672 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 40s / 60s). For more details, please visit the OpenAPI official website.
+281473410868416 2026-06-20 22:15:48,670 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:15:48,670 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 45s / 60s). For more details, please visit the OpenAPI official website.
+281473410868416 2026-06-20 22:15:53,686 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:15:53,686 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 50s / 60s). For more details, please visit the OpenAPI official website.
+281473410868416 2026-06-20 22:15:58,743 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:15:58,744 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server status not verified, check_token loop will start, waiting 5 seconds... (elapsed 55s / 60s). For more details, please visit the OpenAPI official website.
+281473410868416 2026-06-20 22:16:03,692 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server result of current check_token loop. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:16:03,692 webull.core.http.initializer.token.token_manager WARNING fetch_token_from_server check_token loop completed. reached the maximum retries without passing validation, returning create_access_token. For more details, please visit the OpenAPI official website.
+281473410868416 2026-06-20 22:16:03,693 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473410868416 2026-06-20 22:16:03,695 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281473410868416 2026-06-20 22:16:03,695 webull.core.http.initializer.token.token_manager ERROR init_token status not verified error. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473027785920 2026-06-20 22:17:41,088 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473027785920 2026-06-20 22:17:41,088 webull.core.http.initializer.token.token_storage INFO storage_token uses the custom configuration, token_dir:/app/conf/webull_tokens/29751cbcdd928c4edaf97786.
+281473027785920 2026-06-20 22:17:41,089 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:41,089 webull.core.http.initializer.token.token_storage WARNING storage_token Note: The token file already exists, the latest token configuration will be overwritten and written to the token file after successful 2FA verification. path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:41,089 webull.core.http.initializer.token.token_manager INFO load_token_from_local reading token from file...
+281473027785920 2026-06-20 22:17:41,089 webull.core.http.initializer.token.token_manager INFO load_token_from_local read local token result. token:a28eff******489f49 expires:1781994063322 status:PENDING
+281473027785920 2026-06-20 22:17:41,178 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,179 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token status is verified, no further check required, returning directly. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,179 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,180 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281473027785920 2026-06-20 22:17:41,180 webull.core.http.initializer.token.token_manager INFO init_token finished. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,453 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473027785920 2026-06-20 22:17:41,453 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473027785920 2026-06-20 22:17:41,454 webull.core.http.initializer.token.token_storage INFO storage_token uses the custom configuration, token_dir:/app/conf/webull_tokens/29751cbcdd928c4edaf97786.
+281473027785920 2026-06-20 22:17:41,454 webull.core.http.initializer.token.token_storage INFO storage_token uses the custom configuration, token_dir:/app/conf/webull_tokens/29751cbcdd928c4edaf97786.
+281473027785920 2026-06-20 22:17:41,455 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:41,455 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:41,456 webull.core.http.initializer.token.token_storage WARNING storage_token Note: The token file already exists, the latest token configuration will be overwritten and written to the token file after successful 2FA verification. path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:41,456 webull.core.http.initializer.token.token_storage WARNING storage_token Note: The token file already exists, the latest token configuration will be overwritten and written to the token file after successful 2FA verification. path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:41,457 webull.core.http.initializer.token.token_manager INFO load_token_from_local reading token from file...
+281473027785920 2026-06-20 22:17:41,457 webull.core.http.initializer.token.token_manager INFO load_token_from_local reading token from file...
+281473027785920 2026-06-20 22:17:41,458 webull.core.http.initializer.token.token_manager INFO load_token_from_local read local token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,458 webull.core.http.initializer.token.token_manager INFO load_token_from_local read local token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,543 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,543 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,545 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token status is verified, no further check required, returning directly. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,545 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token status is verified, no further check required, returning directly. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,546 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,546 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,547 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281473027785920 2026-06-20 22:17:41,547 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281473027785920 2026-06-20 22:17:41,547 webull.core.http.initializer.token.token_manager INFO init_token finished. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,547 webull.core.http.initializer.token.token_manager INFO init_token finished. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,864 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473027785920 2026-06-20 22:17:41,864 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473027785920 2026-06-20 22:17:41,864 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473027785920 2026-06-20 22:17:41,867 webull.core.http.initializer.token.token_storage INFO storage_token uses the custom configuration, token_dir:/app/conf/webull_tokens/29751cbcdd928c4edaf97786.
+281473027785920 2026-06-20 22:17:41,867 webull.core.http.initializer.token.token_storage INFO storage_token uses the custom configuration, token_dir:/app/conf/webull_tokens/29751cbcdd928c4edaf97786.
+281473027785920 2026-06-20 22:17:41,867 webull.core.http.initializer.token.token_storage INFO storage_token uses the custom configuration, token_dir:/app/conf/webull_tokens/29751cbcdd928c4edaf97786.
+281473027785920 2026-06-20 22:17:41,868 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:41,868 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:41,868 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:41,869 webull.core.http.initializer.token.token_storage WARNING storage_token Note: The token file already exists, the latest token configuration will be overwritten and written to the token file after successful 2FA verification. path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:41,869 webull.core.http.initializer.token.token_storage WARNING storage_token Note: The token file already exists, the latest token configuration will be overwritten and written to the token file after successful 2FA verification. path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:41,869 webull.core.http.initializer.token.token_storage WARNING storage_token Note: The token file already exists, the latest token configuration will be overwritten and written to the token file after successful 2FA verification. path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:41,869 webull.core.http.initializer.token.token_manager INFO load_token_from_local reading token from file...
+281473027785920 2026-06-20 22:17:41,869 webull.core.http.initializer.token.token_manager INFO load_token_from_local reading token from file...
+281473027785920 2026-06-20 22:17:41,869 webull.core.http.initializer.token.token_manager INFO load_token_from_local reading token from file...
+281473027785920 2026-06-20 22:17:41,870 webull.core.http.initializer.token.token_manager INFO load_token_from_local read local token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,870 webull.core.http.initializer.token.token_manager INFO load_token_from_local read local token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,870 webull.core.http.initializer.token.token_manager INFO load_token_from_local read local token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,960 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,960 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,960 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,962 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token status is verified, no further check required, returning directly. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,962 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token status is verified, no further check required, returning directly. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,962 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token status is verified, no further check required, returning directly. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,963 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,963 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,963 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,964 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281473027785920 2026-06-20 22:17:41,964 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281473027785920 2026-06-20 22:17:41,964 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281473027785920 2026-06-20 22:17:41,965 webull.core.http.initializer.token.token_manager INFO init_token finished. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,965 webull.core.http.initializer.token.token_manager INFO init_token finished. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:41,965 webull.core.http.initializer.token.token_manager INFO init_token finished. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,201 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473027785920 2026-06-20 22:17:42,201 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473027785920 2026-06-20 22:17:42,201 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473027785920 2026-06-20 22:17:42,201 webull.core.http.initializer.client_initializer INFO _check_token_enable result is True
+281473027785920 2026-06-20 22:17:42,203 webull.core.http.initializer.token.token_storage INFO storage_token uses the custom configuration, token_dir:/app/conf/webull_tokens/29751cbcdd928c4edaf97786.
+281473027785920 2026-06-20 22:17:42,203 webull.core.http.initializer.token.token_storage INFO storage_token uses the custom configuration, token_dir:/app/conf/webull_tokens/29751cbcdd928c4edaf97786.
+281473027785920 2026-06-20 22:17:42,203 webull.core.http.initializer.token.token_storage INFO storage_token uses the custom configuration, token_dir:/app/conf/webull_tokens/29751cbcdd928c4edaf97786.
+281473027785920 2026-06-20 22:17:42,203 webull.core.http.initializer.token.token_storage INFO storage_token uses the custom configuration, token_dir:/app/conf/webull_tokens/29751cbcdd928c4edaf97786.
+281473027785920 2026-06-20 22:17:42,205 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:42,205 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:42,205 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:42,205 webull.core.http.initializer.token.token_storage INFO storage_token initialized path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:42,206 webull.core.http.initializer.token.token_storage WARNING storage_token Note: The token file already exists, the latest token configuration will be overwritten and written to the token file after successful 2FA verification. path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:42,206 webull.core.http.initializer.token.token_storage WARNING storage_token Note: The token file already exists, the latest token configuration will be overwritten and written to the token file after successful 2FA verification. path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:42,206 webull.core.http.initializer.token.token_storage WARNING storage_token Note: The token file already exists, the latest token configuration will be overwritten and written to the token file after successful 2FA verification. path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:42,206 webull.core.http.initializer.token.token_storage WARNING storage_token Note: The token file already exists, the latest token configuration will be overwritten and written to the token file after successful 2FA verification. path:/app/conf/webull_tokens/29751cbcdd928c4edaf97786/token.txt.
+281473027785920 2026-06-20 22:17:42,206 webull.core.http.initializer.token.token_manager INFO load_token_from_local reading token from file...
+281473027785920 2026-06-20 22:17:42,206 webull.core.http.initializer.token.token_manager INFO load_token_from_local reading token from file...
+281473027785920 2026-06-20 22:17:42,206 webull.core.http.initializer.token.token_manager INFO load_token_from_local reading token from file...
+281473027785920 2026-06-20 22:17:42,206 webull.core.http.initializer.token.token_manager INFO load_token_from_local reading token from file...
+281473027785920 2026-06-20 22:17:42,207 webull.core.http.initializer.token.token_manager INFO load_token_from_local read local token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,207 webull.core.http.initializer.token.token_manager INFO load_token_from_local read local token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,207 webull.core.http.initializer.token.token_manager INFO load_token_from_local read local token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,207 webull.core.http.initializer.token.token_manager INFO load_token_from_local read local token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,348 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,348 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,348 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,348 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token result. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,350 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token status is verified, no further check required, returning directly. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,350 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token status is verified, no further check required, returning directly. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,350 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token status is verified, no further check required, returning directly. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,350 webull.core.http.initializer.token.token_manager INFO fetch_token_from_server create_token status is verified, no further check required, returning directly. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,351 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,351 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,351 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,351 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to local file. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,353 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281473027785920 2026-06-20 22:17:42,353 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281473027785920 2026-06-20 22:17:42,353 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281473027785920 2026-06-20 22:17:42,353 webull.core.http.initializer.token.token_manager INFO save_token_to_local writing token to file completed.
+281473027785920 2026-06-20 22:17:42,353 webull.core.http.initializer.token.token_manager INFO init_token finished. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,353 webull.core.http.initializer.token.token_manager INFO init_token finished. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,353 webull.core.http.initializer.token.token_manager INFO init_token finished. token:a28eff******489f49 expires:1783289791686 status:NORMAL
+281473027785920 2026-06-20 22:17:42,353 webull.core.http.initializer.token.token_manager INFO init_token finished. token:a28eff******489f49 expires:1783289791686 status:NORMAL

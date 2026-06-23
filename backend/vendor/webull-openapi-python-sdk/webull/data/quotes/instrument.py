@@ -1,0 +1,263 @@
+# Copyright 2022 Webull
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# 	http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from webull.data.common.category import Category
+from webull.data.request.get_analyst_rating_request import GetAnalystRatingRequest
+from webull.data.request.get_analyst_target_price_request import GetAnalystTargetPriceRequest
+from webull.data.request.get_company_profile_request import GetCompanyProfileRequest
+from webull.data.request.get_event_events_request import GetEventEventsRequest
+from webull.data.request.get_event_instrument_request import GetEventInstrumentRequest
+from webull.data.request.get_event_series_categories import GetEventCategoriesRequest
+from webull.data.request.get_event_series_request import GetEventSeriesRequest
+from webull.data.request.get_instruments_request import GetInstrumentsRequest
+from webull.data.request.get_crypto_instruments_request import GetCryptoInstrumentsRequest
+from webull.data.request.get_futures_instruments_request import GetFuturesInstrumentsRequest
+from webull.data.request.get_futures_products_request import GetFuturesProductsRequest
+from webull.data.request.get_futures_instruments_by_code_request import GetFuturesInstrumentsByCodeRequest
+from webull.data.request.get_futures_product_class import GetFuturesProductClassRequest
+
+
+class Instrument:
+    def __init__(self, api_client):
+        self.client = api_client
+
+    def get_instrument(self, symbols=None, category=Category.US_STOCK.name, status=None, last_instrument_id=None,
+                       page_size=1000):
+        """
+         Query the underlying information according to the security symbol list and security type.
+
+        :param symbols: Securities symbol, such as: 00700,00981.
+        :param category: Security type, enumeration.
+        :param status: Tradable status.
+        :param last_instrument_id: Last instrument id for pagination.
+        :param page_size: Page size, default 1000.
+        """
+        instruments_request = GetInstrumentsRequest()
+        instruments_request.set_symbols(symbols)
+        instruments_request.set_category(category)
+        instruments_request.set_status(status)
+        instruments_request.set_last_instrument_id(last_instrument_id)
+        instruments_request.set_page_size(page_size)
+        response = self.client.get_response(instruments_request)
+        return response
+
+    def get_crypto_instrument(self, symbols=None, status=None, last_instrument_id=None,
+                              category=Category.US_CRYPTO.name, page_size=1000):
+        """
+         Query the crypto underlying information according to the security symbol.
+        :param symbols: Securities symbol, such as: BTCUSD,ETHUSD.
+        :param status: Tradable status.
+        :param last_instrument_id: Last instrument id for pagination.
+        :param category: (str, required) Instrument type.
+                     Possible values: ["US_CRYPTO"]
+                     Example: "US_CRYPTO"
+        :param page_size: Page size, default 1000.
+        """
+        crypto_instruments_request = GetCryptoInstrumentsRequest()
+        crypto_instruments_request.set_symbols(symbols)
+        crypto_instruments_request.set_category(category)
+        crypto_instruments_request.set_status(status)
+        crypto_instruments_request.set_last_instrument_id(last_instrument_id)
+        crypto_instruments_request.set_page_size(page_size)
+        response = self.client.get_response(crypto_instruments_request)
+        return response
+
+    def get_futures_instrument(self, symbols=None, category=Category.US_STOCK.name, code=None, status=None):
+        """
+         Query the futures instrument information based on the futures contract symbol.
+
+        :param category: Security type, enumeration.
+        :param symbols: Futures contract symbol, such as: ESmain,ESM5.
+        :param code: Futures contract code, such as: ES.
+        :param status: Tradable status.
+        """
+
+        futures_instrument_request = GetFuturesInstrumentsRequest()
+        futures_instrument_request.set_category(category)
+        if symbols:
+            futures_instrument_request.set_symbols(symbols)
+        if code:
+            futures_instrument_request.set_code(code)
+        if status:
+            futures_instrument_request.set_status(status)
+        response = self.client.get_response(futures_instrument_request)
+        return response
+
+    def get_futures_products(self, category, product_class_id=None):
+        """
+        Query futures contract codes in batches based on security types.
+
+        :param category: Security type, enumeration.
+        :param product_class_id: Asset classification code, used to filter products of specific categories
+        """
+
+        batch_futures_products_request = GetFuturesProductsRequest()
+        batch_futures_products_request.set_category(category)
+        if product_class_id:
+            batch_futures_products_request.set_product_class_id(product_class_id)
+        response = self.client.get_response(batch_futures_products_request)
+        return response
+
+    """
+    Deprecated: This endpoint is deprecated, please use the get_futures_instrument endpoint 
+    """
+    def get_futures_instrument_by_code(self, code, category, contract_type=None):
+        """
+        Query futures instrument information based on futures contract code.
+
+        :param code: Futures contract code, such as: ES.
+        :param category: Security type, enumeration.
+        :param contract_type: Contract type, values include
+            - MONTHLY: Regular monthly contract
+            - MAIN: Main continuous contract
+        """
+
+        futures_instrument_request = GetFuturesInstrumentsByCodeRequest()
+        futures_instrument_request.set_codes(code)
+        futures_instrument_request.set_category(category)
+        if contract_type:
+            futures_instrument_request.set_contract_type(contract_type)
+        response = self.client.get_response(futures_instrument_request)
+        return response
+
+    def get_futures_product_class(self, category):
+        """
+        Query futures product classes based on security types.
+
+        :param category: Security type, enumeration.
+        """
+
+        futures_product_class_request = GetFuturesProductClassRequest()
+        futures_product_class_request.set_category(category)
+        response = self.client.get_response(futures_product_class_request)
+        return response
+
+    def get_event_categories(self):
+        """
+        Query event contract categories
+        """
+        event_categories_request = GetEventCategoriesRequest()
+        response = self.client.get_response(event_categories_request)
+        return response
+
+    def get_event_series(self, category=None, symbols=None, last_series_id=None, page_size=500):
+        """
+        Retrieve multiple series with specified filters.
+        A series represents a template for recurring events that follow the same format and rules (e.g., “Monthly Jobs Report” ).
+        This endpoint allows you to browse and discover available series templates by category.
+
+        :param category: The category which this series belongs to.Allowed values:
+                        ECONOMICS, FINANCIALS, POLITICS, ENTERTAINMENT, SCIENCE_TECHNOLOGY,
+                        CLIMATE_WEATHER, TRANSPORTATION, CRYPTO, SPORTS
+        :param symbols: Symbol of the event series, supports JSON array format, multiple symbols separated by commas; maximum 100 symbols per query.
+        :param last_series_id: Last series id for pagination.
+        :param page_size: Page size, default 500.
+        """
+
+        event_series_request = GetEventSeriesRequest()
+        if category:
+            event_series_request.set_category(category)
+        if symbols:
+            event_series_request.set_symbols(symbols)
+        if last_series_id:
+            event_series_request.set_last_series_id(last_series_id)
+        event_series_request.set_page_size(page_size)
+        response = self.client.get_response(event_series_request)
+        return response
+
+    def get_event_events(self, series_symbol, symbols=None, status=None):
+        """
+        Query event contract events
+
+        :param series_symbol: Series Symbol that identifies this series.
+        :param symbols: Symbol of the event events, supports JSON array format, multiple symbols separated by commas; maximum 100 symbols per query.
+        :param status: Event status (optional, defaults to querying tradable/valid events).
+        """
+        event_events_request = GetEventEventsRequest()
+        event_events_request.set_series_symbol(series_symbol)
+        if symbols:
+            event_events_request.set_symbols(symbols)
+        if status:
+            event_events_request.set_status(status)
+        response = self.client.get_response(event_events_request)
+        return response
+
+    def get_event_instrument(self, series_symbol, event_symbol=None, symbols=None, expiration_date_after=None, last_instrument_id=None, page_size=500):
+        """
+        Retrieve profile information for event contract markets based on the series symbol.
+
+        :param series_symbol: Symbol that identifies this series.
+        :param event_symbol: Symbol of the event events.
+        :param symbols: Symbol of the event market, supports JSON array format, multiple symbols separated by commas; maximum 100 symbols per query.
+        :param expiration_date_after: Used to filter items whose expiration date is later than a specified date; the default selection is the current day (inclusive).
+        :param last_instrument_id: Last instrument id for pagination.
+        :param page_size: Page size, default 500.
+        """
+
+        event_instrument_request = GetEventInstrumentRequest()
+        event_instrument_request.set_series_symbol(series_symbol)
+        if event_symbol:
+            event_instrument_request.set_event_symbol(event_symbol)
+        if symbols:
+            event_instrument_request.set_symbols(symbols)
+        if expiration_date_after:
+            event_instrument_request.set_expiration_date_after(expiration_date_after)
+        if last_instrument_id:
+            event_instrument_request.set_last_instrument_id(last_instrument_id)
+        event_instrument_request.set_page_size(page_size)
+        response = self.client.get_response(event_instrument_request)
+        return response
+
+    def get_company_profile(self, symbol, category=Category.US_STOCK.name):
+        """
+        Get company profile for one instrument.
+
+        :param symbol: Security symbol, e.g., AAPL
+        :param category: Security type. Possible values: US_STOCK. Default is US_STOCK.
+        :return: Company profile including company name, establish date, CEO, employees,
+                 address, profile description, industries, etc.
+        """
+        request = GetCompanyProfileRequest()
+        request.set_symbol(symbol)
+        request.set_category(category)
+        response = self.client.get_response(request)
+        return response
+
+    def get_analyst_target_price(self, symbol, category=Category.US_STOCK.name):
+        """
+        Get analyst target price for one instrument.
+
+        :param symbol: Security symbol, e.g., AAPL
+        :param category: Security type. Possible values: US_STOCK. Default is US_STOCK.
+        :return: Analyst target price including mean, low, high, median price and currency.
+        """
+        request = GetAnalystTargetPriceRequest()
+        request.set_symbol(symbol)
+        request.set_category(category)
+        response = self.client.get_response(request)
+        return response
+
+    def get_analyst_rating(self, symbol, category=Category.US_STOCK.name):
+        """
+        Get analyst rating for one instrument.
+
+        :param symbol: Security symbol, e.g., AAPL
+        :param category: Security type. Possible values: US_STOCK. Default is US_STOCK.
+        :return: Analyst rating including total number of analysts, buy/sell/hold counts,
+                 strong buy count, under perform count, etc.
+        """
+        request = GetAnalystRatingRequest()
+        request.set_symbol(symbol)
+        request.set_category(category)
+        response = self.client.get_response(request)
+        return response
