@@ -24,8 +24,9 @@ class SignalResponse(BaseModel):
 
 
 class RankedSignalResponse(SignalResponse):
-    rank: int           # 1-based position in the top-30 list
+    rank: int           # 1-based position in the ranked list
     tier: str           # "green" | "light_green" | "light_yellow"
+    option_type: str    # "CALL" | "PUT" — derived from signal_type (BUY->CALL, SELL->PUT)
 
 
 class WatchlistAddRequest(BaseModel):

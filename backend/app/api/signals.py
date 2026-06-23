@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import func, select, update
 
@@ -160,15 +161,19 @@ async def get_signals(current_user: CurrentUser, db: DB, limit: int = 50):
 
 
 @router.get("/top-ranked", response_model=list[RankedSignalResponse])
-async def get_top_ranked_signals(current_user: CurrentUser, db: DB):
+async def get_top_ranked_signals(current_user: CurrentUser, db: DB, per_tier: int = 10):
     """
-    Top 30 actionable opportunities across the user's watchlist, ranked by
-    the signal engine's live confidence score (one row per symbol — its most
-    recent BUY/SELL signal). Tiered by rank position, not a fixed confidence
-    cutoff: positions 1-10 = green, 11-20 = light_green, 21-30 = light_yellow.
-    HOLD signals and rows missing entry/target/stop are excluded — there's
-    no real entry/exit point to show for those.
+    Top (per_tier * 3) actionable opportunities across the user's watchlist,
+    ranked by the signal engine's live confidence score (one row per symbol —
+    its most recent BUY/SELL signal). Tiered by rank position, not a fixed
+    confidence cutoff: positions 1..per_tier = green, next per_tier =
+    light_green, next per_tier = light_yellow. HOLD signals and rows missing
+    entry/target/stop are excluded — there's no real entry/exit point to
+    show for those. `per_tier` defaults to 10 (Signals page); the Day Trade
+    Signal page calls this with per_tier=20.
     """
+    per_tier = max(1, min(per_tier, 50))
+
     result = await db.execute(
         select(Watchlist).where(
             Watchlist.user_id == current_user.id, Watchlist.is_default == True
@@ -205,14 +210,14 @@ async def get_top_ranked_signals(current_user: CurrentUser, db: DB):
             Signal.entry_price.is_not(None),
         )
         .order_by(Signal.confidence.desc())
-        .limit(30)
+        .limit(per_tier * 3)
     )
     rows = result.all()
 
     out = []
     for i, (sig, sym) in enumerate(rows):
         rank = i + 1
-        tier = "green" if rank <= 10 else "light_green" if rank <= 20 else "light_yellow"
+        tier = "green" if rank <= per_tier else "light_green" if rank <= per_tier * 2 else "light_yellow"
         out.append(RankedSignalResponse(
             id=sig.id,
             symbol=sym.ticker,
@@ -230,8 +235,103 @@ async def get_top_ranked_signals(current_user: CurrentUser, db: DB):
             created_at=sig.created_at,
             rank=rank,
             tier=tier,
+            option_type="CALL" if sig.signal_type == "BUY" else "PUT",
         ))
     return out
+
+
+@router.get("/detail/{ticker}")
+async def get_signal_detail(ticker: str, current_user: CurrentUser, db: DB):
+    """
+    Everything the Day Trade Signal page's click-through view needs for one
+    symbol: the latest signal, real bars for the chart, the live options
+    chain (if the connected broker supports it), and a strategy
+    recommendation derived from the real signal + real regime — not called
+    on every 1s list refresh, only when a ticker is actually opened.
+    """
+    ticker = ticker.upper()
+
+    result = await db.execute(select(Symbol).where(Symbol.ticker == ticker))
+    sym = result.scalar_one_or_none()
+
+    latest_signal = None
+    if sym:
+        result = await db.execute(
+            select(Signal)
+            .where(Signal.symbol_id == sym.id)
+            .order_by(Signal.created_at.desc())
+            .limit(1)
+        )
+        sig = result.scalar_one_or_none()
+        if sig:
+            latest_signal = {
+                "signal_type": sig.signal_type,
+                "confidence": sig.confidence,
+                "entry_price": sig.entry_price,
+                "target_price": sig.target_price,
+                "stop_price": sig.stop_price,
+                "pattern_detected": sig.pattern_detected,
+                "indicators": sig.indicators,
+                "reasoning": sig.reasoning,
+                "created_at": sig.created_at.isoformat(),
+            }
+
+    result = await db.execute(
+        select(BrokerConnection).where(
+            BrokerConnection.user_id == current_user.id, BrokerConnection.is_active == True
+        )
+    )
+    conn = result.scalars().first()
+
+    bars: list[dict] = []
+    options_chain = None
+    regime = "sideways"
+
+    if conn:
+        adapter = get_adapter(conn.broker_name)
+        try:
+            bars = adapter.get_bars(conn, ticker, "1Day", 100)
+        except Exception:
+            bars = []
+
+        if len(bars) >= 30:
+            try:
+                df = pd.DataFrame([
+                    {"open": b["o"], "high": b["h"], "low": b["l"], "close": b["c"], "volume": b["v"]}
+                    for b in bars
+                ])
+                ind = signal_engine.compute_indicators(df)
+                regime = signal_engine.detect_regime(df, ind)
+            except Exception:
+                regime = "sideways"
+
+        if hasattr(adapter, "get_options_chain"):
+            try:
+                options_chain = adapter.get_options_chain(conn, ticker)
+            except Exception:
+                options_chain = None
+
+    current_price = bars[-1]["c"] if bars else (latest_signal["entry_price"] if latest_signal else None)
+
+    strategy_recommendation = None
+    if latest_signal and current_price:
+        rec = opts_svc.recommend(
+            signal_type=latest_signal["signal_type"],
+            regime=regime,
+            iv_rank=None,
+            current_price=current_price,
+        )
+        strategy_recommendation = opts_svc.to_dict(rec)
+
+    return {
+        "symbol": ticker,
+        "signal": latest_signal,
+        "bars": bars,
+        "regime": regime,
+        "options_chain": options_chain,
+        "strategy_recommendation": strategy_recommendation,
+        "has_broker_connection": conn is not None,
+    }
 
 
 @router.post("/refresh/{ticker}", response_model=SignalResponse)

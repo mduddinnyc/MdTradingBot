@@ -129,7 +129,9 @@ export const brokerApi = {
 export const signalApi = {
   list: (limit = 50) => api.get("/signals/", { params: { limit } }).then((r) => r.data),
 
-  topRanked: () => api.get("/signals/top-ranked").then((r) => r.data),
+  topRanked: (perTier = 10) => api.get("/signals/top-ranked", { params: { per_tier: perTier } }).then((r) => r.data),
+
+  detail: (ticker: string) => api.get(`/signals/detail/${ticker}`).then((r) => r.data),
 
   refresh: (ticker: string) => api.post(`/signals/refresh/${ticker}`).then((r) => r.data),
 
