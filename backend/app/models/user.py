@@ -17,8 +17,13 @@ class User(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Nullable: OAuth-only accounts (Google/Apple) have no local password.
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     full_name: Mapped[str | None] = mapped_column(String(255))
+
+    # OAuth scaffold — "local" until Google/Apple sign-in is wired with real credentials.
+    provider: Mapped[str] = mapped_column(String(20), default="local")
+    provider_user_id: Mapped[str | None] = mapped_column(String(255))
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -68,6 +73,30 @@ class UserSession(Base):
     user: Mapped["User"] = relationship("User", back_populates="sessions")
 
     __table_args__ = (Index("ix_user_sessions_user_id", "user_id"),)
+
+
+class PasswordResetToken(Base):
+    """Single-use, short-lived token for the forgot/reset password flow.
+    Mirrors UserSession's hash-only pattern — the raw token is never stored."""
+
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    user: Mapped["User"] = relationship("User")
+
+    __table_args__ = (Index("ix_password_reset_tokens_user_id", "user_id"),)
 
 
 class AuditLog(Base):

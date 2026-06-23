@@ -45,6 +45,14 @@ def create_refresh_token() -> tuple[str, str, datetime]:
     return raw, hashed, expires_at
 
 
+def create_reset_token() -> tuple[str, str, datetime]:
+    """Returns (raw_token, sha256_hash, expiry). Store only the hash. Short-lived — 1 hour."""
+    raw = secrets.token_urlsafe(48)
+    hashed = _hash_token(raw)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    return raw, hashed, expires_at
+
+
 def decode_access_token(token: str) -> str | None:
     """Returns user_id string or None if invalid/expired."""
     try:

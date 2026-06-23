@@ -71,6 +71,15 @@ export const authApi = {
 
   me: () => api.get("/auth/me").then((r) => r.data),
 
+  forgotPassword: (email: string) =>
+    api.post("/auth/password/forgot", { email }).then((r) => r.data),
+
+  resetPassword: (token: string, new_password: string) =>
+    api.post("/auth/password/reset", { token, new_password }).then((r) => r.data),
+
+  oauthLogin: (provider: "google" | "apple") =>
+    api.post(`/auth/oauth/${provider}`).then((r) => r.data),
+
   setup2fa: () => api.post("/auth/2fa/setup").then((r) => r.data),
   enable2fa: (code: string) => api.post("/auth/2fa/enable", { code }),
   disable2fa: (code: string) => api.post("/auth/2fa/disable", { code }),

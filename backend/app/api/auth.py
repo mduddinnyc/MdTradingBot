@@ -12,6 +12,7 @@ from app.core.deps import CurrentUser, DB
 from app.core.security import (
     create_access_token,
     create_refresh_token,
+    create_reset_token,
     decrypt_totp_secret,
     encrypt_totp_secret,
     generate_totp_secret,
@@ -21,18 +22,21 @@ from app.core.security import (
     verify_password,
     verify_totp,
 )
-from app.models.user import User, UserSession
+from app.models.user import PasswordResetToken, User, UserSession
 from app.schemas.auth import (
+    ForgotPasswordRequest,
     LoginRequest,
     MessageResponse,
     RefreshRequest,
     RegisterRequest,
+    ResetPasswordRequest,
     TOTPEnableRequest,
     TOTPSetupResponse,
     TOTPVerifyRequest,
     TokenResponse,
     UserResponse,
 )
+from app.services import notifications as notif_svc
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -67,7 +71,7 @@ async def login(body: LoginRequest, request: Request, db: DB):
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(body.password, user.password_hash):
+    if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
         await audit_log(
             db, action="LOGIN_FAILURE", outcome="failure",
             metadata={"email": body.email}, request=request
@@ -256,3 +260,117 @@ async def totp_disable(body: TOTPVerifyRequest, current_user: CurrentUser, reque
     )
 
     return MessageResponse(message="2FA disabled")
+
+
+# ── Forgot password ─────────────────────────────────────────────
+
+_GENERIC_FORGOT_MESSAGE = "If an account exists for that email, we've sent a password reset link."
+
+
+@router.post("/password/forgot", response_model=MessageResponse)
+async def forgot_password(body: ForgotPasswordRequest, request: Request, db: DB):
+    """
+    Always returns the same generic message whether or not the email exists —
+    prevents an attacker from using this endpoint to enumerate registered
+    accounts. Only sends an email when a matching, active user is found.
+    """
+    result = await db.execute(select(User).where(User.email == body.email))
+    user = result.scalar_one_or_none()
+
+    if user and user.is_active:
+        # Invalidate any prior outstanding tokens so only the newest is valid.
+        old_tokens = (await db.execute(
+            select(PasswordResetToken).where(
+                PasswordResetToken.user_id == user.id,
+                PasswordResetToken.used_at.is_(None),
+            )
+        )).scalars().all()
+        now = datetime.now(timezone.utc)
+        for t in old_tokens:
+            t.used_at = now
+
+        raw_token, token_hash, expires_at = create_reset_token()
+        reset_token = PasswordResetToken(
+            user_id=user.id, token_hash=token_hash, expires_at=expires_at,
+        )
+        db.add(reset_token)
+        await db.flush()
+
+        notif_svc.send_password_reset_email(user.email, raw_token)
+
+        await audit_log(
+            db, action="PASSWORD_RESET_REQUESTED", outcome="success",
+            user_id=user.id, resource_type="password_reset_token", resource_id=reset_token.id,
+            request=request,
+        )
+    else:
+        await audit_log(
+            db, action="PASSWORD_RESET_REQUESTED", outcome="blocked",
+            metadata={"email": body.email}, request=request,
+        )
+
+    return MessageResponse(message=_GENERIC_FORGOT_MESSAGE)
+
+
+# ── Reset password ──────────────────────────────────────────────
+
+@router.post("/password/reset", response_model=MessageResponse)
+async def reset_password(body: ResetPasswordRequest, request: Request, db: DB):
+    token_hash = hash_refresh_token(body.token)
+    now = datetime.now(timezone.utc)
+
+    result = await db.execute(
+        select(PasswordResetToken).where(
+            PasswordResetToken.token_hash == token_hash,
+            PasswordResetToken.used_at.is_(None),
+            PasswordResetToken.expires_at > now,
+        )
+    )
+    reset_token = result.scalar_one_or_none()
+
+    if not reset_token:
+        await audit_log(
+            db, action="PASSWORD_RESET_COMPLETED", outcome="blocked",
+            metadata={"reason": "invalid_or_expired_token"}, request=request,
+        )
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    result = await db.execute(select(User).where(User.id == reset_token.user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    user.password_hash = hash_password(body.new_password)
+    reset_token.used_at = now
+
+    # Force re-login everywhere — revoke every active session for this user.
+    sessions = (await db.execute(
+        select(UserSession).where(
+            UserSession.user_id == user.id,
+            UserSession.revoked_at.is_(None),
+        )
+    )).scalars().all()
+    for s in sessions:
+        s.revoked_at = now
+
+    await audit_log(
+        db, action="PASSWORD_RESET_COMPLETED", outcome="success",
+        user_id=user.id, request=request,
+    )
+
+    return MessageResponse(message="Password reset successfully. Please log in with your new password.")
+
+
+# ── OAuth (scaffold — inactive until real credentials are configured) ──
+
+_SUPPORTED_OAUTH_PROVIDERS = {"google", "apple"}
+
+
+@router.post("/oauth/{provider}")
+async def oauth_login(provider: str):
+    if provider not in _SUPPORTED_OAUTH_PROVIDERS:
+        raise HTTPException(status_code=404, detail=f"Unknown provider '{provider}'")
+    raise HTTPException(
+        status_code=501,
+        detail=f"Sign in with {provider.capitalize()} isn't configured yet. Use email and password for now.",
+    )

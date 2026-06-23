@@ -26,36 +26,39 @@ logger = logging.getLogger(__name__)
 
 
 def _smtp_config() -> dict | None:
+    """Base SMTP transport config. `to` defaults to NOTIFY_EMAIL (the system
+    alert recipient) but callers can override it per-send for user-specific
+    emails like password resets — see _send_email's `to` parameter."""
     host = getattr(settings, "SMTP_HOST", None)
     user = getattr(settings, "SMTP_USER", None)
     pwd  = getattr(settings, "SMTP_PASSWORD", None)
-    to   = getattr(settings, "NOTIFY_EMAIL", None)
     port = int(getattr(settings, "SMTP_PORT", 587))
-    if not (host and user and pwd and to):
+    if not (host and user and pwd):
         return None
-    return {"host": host, "port": port, "user": user, "password": pwd, "to": to}
+    return {"host": host, "port": port, "user": user, "password": pwd, "to": getattr(settings, "NOTIFY_EMAIL", None)}
 
 
 def _slack_url() -> str | None:
     return getattr(settings, "SLACK_WEBHOOK_URL", None)
 
 
-def _send_email(subject: str, body: str) -> None:
+def _send_email(subject: str, body: str, to: str | None = None) -> None:
     cfg = _smtp_config()
-    if not cfg:
-        logger.debug("Email notifications not configured (SMTP_HOST/SMTP_USER/SMTP_PASSWORD/NOTIFY_EMAIL missing)")
+    recipient = to or (cfg or {}).get("to")
+    if not cfg or not recipient:
+        logger.debug("Email notifications not configured (SMTP_HOST/SMTP_USER/SMTP_PASSWORD missing, or no recipient)")
         return
     try:
         msg = MIMEText(body, "plain")
         msg["Subject"] = f"[TradingPlatform] {subject}"
         msg["From"]    = cfg["user"]
-        msg["To"]      = cfg["to"]
+        msg["To"]      = recipient
         ctx = ssl.create_default_context()
         with smtplib.SMTP(cfg["host"], cfg["port"]) as s:
             s.ehlo()
             s.starttls(context=ctx)
             s.login(cfg["user"], cfg["password"])
-            s.sendmail(cfg["user"], cfg["to"], msg.as_string())
+            s.sendmail(cfg["user"], recipient, msg.as_string())
         logger.info("Email sent: %s", subject)
     except Exception as exc:
         logger.warning("Email send failed: %s", exc)
@@ -103,6 +106,21 @@ def notify_order_fill(
         f"Total     : ${qty * fill_price:,.2f}"
     )
     _notify(subject, body)
+
+
+def send_password_reset_email(to_email: str, reset_token: str) -> None:
+    """
+    Password reset link only goes to the user's own email — never broadcast
+    to Slack, unlike the other _notify() alerts.
+    """
+    reset_url = f"{settings.FRONTEND_URL}/auth/reset-password?token={reset_token}"
+    subject = "Reset your TradingPlatform password"
+    body = (
+        f"We received a request to reset the password for {to_email}.\n\n"
+        f"Reset link (expires in 1 hour):\n{reset_url}\n\n"
+        "If you didn't request this, you can safely ignore this email."
+    )
+    _send_email(subject, body, to=to_email)
 
 
 def notify_emergency_stop(configs_disabled: int, orders_cancelled: int) -> None:
