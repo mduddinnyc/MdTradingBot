@@ -13,7 +13,9 @@ const schema = z.object({
   password: z.string()
     .min(8, "Min 8 chars")
     .regex(/[A-Z]/, "Need uppercase")
-    .regex(/[0-9]/, "Need digit"),
+    .regex(/[a-z]/, "Need lowercase")
+    .regex(/[0-9]/, "Need digit")
+    .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "Need special character"),
 });
 type Form = z.infer<typeof schema>;
 
