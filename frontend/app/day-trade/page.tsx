@@ -127,6 +127,48 @@ function DetailPanel({ ticker, onClose }: { ticker: string; onClose: () => void 
             </div>
           )}
 
+          {data.signal?.indicators?.pivot && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Pivot Points</h3>
+              <div className="grid grid-cols-7 gap-1 text-center">
+                {(["s3", "s2", "s1", "pp", "r1", "r2", "r3"] as const).map((k) => (
+                  <div
+                    key={k}
+                    className={`rounded-lg py-2 ${
+                      k === "pp" ? "bg-brand/10 text-brand" : k.startsWith("s") ? "bg-sell/10 text-sell" : "bg-buy/10 text-buy"
+                    }`}
+                  >
+                    <p className="text-[10px] uppercase opacity-70">{k}</p>
+                    <p className="font-mono font-bold text-xs">{fmtUsd(data.signal.indicators.pivot[k])}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(data.signal?.indicators?.support_levels?.length > 0 || data.signal?.indicators?.resistance_levels?.length > 0) && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Support</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {(data.signal.indicators.support_levels || []).map((lvl: number) => (
+                    <span key={lvl} className="px-2 py-1 rounded bg-sell/10 text-sell text-xs font-mono">{fmtUsd(lvl)}</span>
+                  ))}
+                  {!data.signal.indicators.support_levels?.length && <span className="text-xs text-gray-500">None nearby</span>}
+                </div>
+              </div>
+              <div>
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Resistance</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {(data.signal.indicators.resistance_levels || []).map((lvl: number) => (
+                    <span key={lvl} className="px-2 py-1 rounded bg-buy/10 text-buy text-xs font-mono">{fmtUsd(lvl)}</span>
+                  ))}
+                  {!data.signal.indicators.resistance_levels?.length && <span className="text-xs text-gray-500">None nearby</span>}
+                </div>
+              </div>
+            </div>
+          )}
+
           {data.signal?.reasoning && (
             <div>
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">Reasoning</h3>

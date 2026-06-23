@@ -329,9 +329,85 @@ def detect_regime(df: pd.DataFrame, ind: IndicatorResult) -> str:
     return REGIME_SIDEWAYS
 
 
+# ── Pivot points & support/resistance ──────────────────────────
+
+def compute_pivot_points(df: pd.DataFrame) -> dict:
+    """
+    Classic floor-trader pivot points anchored on the prior completed
+    trading day's H/L/C. Intraday timeframes get resampled to daily bars
+    first; daily timeframes already are one. Returns {} when there isn't
+    a prior completed day yet (e.g. first day of data).
+    """
+    daily = (
+        df.set_index(pd.to_datetime(df["time"]))
+        .resample("1D")
+        .agg({"high": "max", "low": "min", "close": "last"})
+        .dropna()
+    )
+    if len(daily) < 2:
+        return {}
+
+    prior = daily.iloc[-2]
+    high, low, close = float(prior["high"]), float(prior["low"]), float(prior["close"])
+    pp = (high + low + close) / 3
+
+    return {
+        "pp": round(pp, 4),
+        "r1": round(2 * pp - low, 4),
+        "r2": round(pp + (high - low), 4),
+        "r3": round(high + 2 * (pp - low), 4),
+        "s1": round(2 * pp - high, 4),
+        "s2": round(pp - (high - low), 4),
+        "s3": round(low - 2 * (high - pp), 4),
+    }
+
+
+def find_support_resistance(df: pd.DataFrame, lookback: int = 50, n_levels: int = 3) -> dict:
+    """
+    Swing-based support/resistance from recent price action: a bar is a
+    swing high/low if it's the local extreme within ±2 bars. Nearby swings
+    get clustered (1% tolerance) into one level. Returns up to n_levels
+    levels on each side of the current close, nearest first.
+    """
+    window = df.tail(lookback)
+    if len(window) < 5:
+        return {"support": [], "resistance": []}
+
+    high = window["high"].values
+    low = window["low"].values
+    close = float(window["close"].iloc[-1])
+
+    swing_highs, swing_lows = [], []
+    for i in range(2, len(window) - 2):
+        if high[i] == max(high[i - 2:i + 3]):
+            swing_highs.append(float(high[i]))
+        if low[i] == min(low[i - 2:i + 3]):
+            swing_lows.append(float(low[i]))
+
+    def cluster(levels: list[float], tol: float = 0.01) -> list[float]:
+        if not levels:
+            return []
+        levels = sorted(levels)
+        groups: list[list[float]] = [[levels[0]]]
+        for lvl in levels[1:]:
+            if abs(lvl - groups[-1][-1]) / groups[-1][-1] <= tol:
+                groups[-1].append(lvl)
+            else:
+                groups.append([lvl])
+        return [sum(g) / len(g) for g in groups]
+
+    resistance = sorted(l for l in cluster(swing_highs) if l > close)[:n_levels]
+    support = sorted((l for l in cluster(swing_lows) if l < close), reverse=True)[:n_levels]
+
+    return {
+        "support": [round(s, 4) for s in support],
+        "resistance": [round(r, 4) for r in resistance],
+    }
+
+
 # ── Signal fusion ──────────────────────────────────────────────
 
-def fuse(ind: IndicatorResult, pattern: PatternResult, close: float) -> FusionResult:
+def fuse(ind: IndicatorResult, pattern: PatternResult, close: float, levels: dict | None = None) -> FusionResult:
     ts = trend_score(ind)
     ms = momentum_score(ind)
 
@@ -345,18 +421,37 @@ def fuse(ind: IndicatorResult, pattern: PatternResult, close: float) -> FusionRe
     # Weighted sum → raw score in [-1, 1]
     raw = W_TREND * ts + W_MOMENTUM * ms + W_PATTERN * ps
     raw = float(np.clip(raw, -1, 1))
-
     confidence = abs(raw)
+
+    # Real support/resistance + pivot levels take priority over the flat
+    # %-based target/stop — a trade should aim at where price is actually
+    # likely to react, not an arbitrary distance. Levels too close to
+    # price (<0.3%) are ignored since they make useless targets/stops.
+    levels = levels or {}
+    pivot = levels.get("pivot") or {}
+    resistances = list(levels.get("resistance") or []) + [pivot[k] for k in ("r1", "r2", "r3") if k in pivot]
+    supports = list(levels.get("support") or []) + [pivot[k] for k in ("s1", "s2", "s3") if k in pivot]
+    min_dist = close * 0.003
+    used_levels = False
+
     if raw > 0.15:
         signal_type = "BUY"
-        atr_mult = 2.0
-        target = close * (1 + confidence * atr_mult / 100)
-        stop = close * (1 - 0.02)
+        above = sorted(r for r in resistances if r - close > min_dist)
+        below = sorted((s for s in supports if close - s > min_dist), reverse=True)
+        if above and below:
+            target, stop, used_levels = above[0], below[0], True
+        else:
+            target = close * (1 + confidence * 2.0 / 100)
+            stop = close * (1 - 0.02)
     elif raw < -0.15:
         signal_type = "SELL"
-        atr_mult = 2.0
-        target = close * (1 - confidence * atr_mult / 100)
-        stop = close * (1 + 0.02)
+        below = sorted((s for s in supports if close - s > min_dist), reverse=True)
+        above = sorted(r for r in resistances if r - close > min_dist)
+        if above and below:
+            target, stop, used_levels = below[0], above[0], True
+        else:
+            target = close * (1 - confidence * 2.0 / 100)
+            stop = close * (1 + 0.02)
     else:
         signal_type = "HOLD"
         target = None
@@ -370,21 +465,33 @@ def fuse(ind: IndicatorResult, pattern: PatternResult, close: float) -> FusionRe
     ]
     if pattern.name:
         reasoning_parts.append(f"Pattern: {pattern.name} ({pattern.direction})")
+    if signal_type != "HOLD":
+        reasoning_parts.append(
+            f"Target/stop from {'support/resistance' if used_levels else '%-fallback (no nearby level)'}"
+        )
+
+    indicators = {
+        "rsi": round(ind.rsi, 2),
+        "macd_hist": round(ind.macd_hist, 6),
+        "bb_pct": round(ind.bb_pct, 4),
+        "ema_signal": ind.ema_signal,
+        "adx": round(ind.adx, 2),
+        "volume_ratio": round(ind.volume_ratio, 2),
+        "vwap_signal": ind.vwap_signal,
+        "trend_score": round(ts, 4),
+        "momentum_score": round(ms, 4),
+    }
+    if pivot:
+        indicators["pivot"] = pivot
+    if levels.get("support"):
+        indicators["support_levels"] = levels["support"]
+    if levels.get("resistance"):
+        indicators["resistance_levels"] = levels["resistance"]
 
     return FusionResult(
         signal_type=signal_type,
         confidence=round(confidence, 4),
-        indicators={
-            "rsi": round(ind.rsi, 2),
-            "macd_hist": round(ind.macd_hist, 6),
-            "bb_pct": round(ind.bb_pct, 4),
-            "ema_signal": ind.ema_signal,
-            "adx": round(ind.adx, 2),
-            "volume_ratio": round(ind.volume_ratio, 2),
-            "vwap_signal": ind.vwap_signal,
-            "trend_score": round(ts, 4),
-            "momentum_score": round(ms, 4),
-        },
+        indicators=indicators,
         pattern=pattern,
         reasoning=" | ".join(reasoning_parts),
         entry_price=round(close, 4),
@@ -432,7 +539,9 @@ async def generate_signal(
     ind = compute_indicators(df)
     pattern = detect_pattern(df)
     regime = detect_regime(df, ind)
-    result_fusion = fuse(ind, pattern, close=float(df["close"].iloc[-1]))
+    sr = find_support_resistance(df)
+    levels = {"pivot": compute_pivot_points(df), **sr}
+    result_fusion = fuse(ind, pattern, close=float(df["close"].iloc[-1]), levels=levels)
 
     expires = datetime.now(timezone.utc) + timedelta(hours=4 if timeframe == "1Hour" else 24)
 
