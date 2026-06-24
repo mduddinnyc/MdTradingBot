@@ -217,6 +217,20 @@ test.describe("Order ticket", () => {
     await expect(dialog.getByText("Enter a limit price to continue.")).toBeVisible();
   });
 
+  test("negative: stop-loss on the wrong side of entry blocks Review Order", async ({ page }) => {
+    await mockTradingData(page);
+    const dialog = await openTicket(page);
+
+    // $ mode lets the price be entered directly — set it above the $200
+    // mock quote on a buy, which is the wrong side for a protective stop.
+    await dialog.getByLabel("Stop-Loss").check();
+    await dialog.getByRole("button", { name: "$", exact: true }).first().click();
+    await dialog.locator('input[type="number"]').nth(1).fill("210");
+
+    await expect(dialog.getByRole("button", { name: "Review Order" })).toBeDisabled();
+    await expect(dialog.getByText("Stop-loss must be below the entry price.")).toBeVisible();
+  });
+
   test("negative: zero quantity blocks Review Order", async ({ page }) => {
     await mockTradingData(page);
     const dialog = await openTicket(page);

@@ -664,6 +664,65 @@ async def place_manual_order(body: ManualOrderRequest, request: Request, current
     if not hasattr(adapter, "place_order"):
         raise HTTPException(status_code=501, detail=f"{conn.broker_name} does not support manual order placement yet")
 
+    # Standard pre-trade checks — same things a real brokerage validates
+    # before accepting an order, not just whatever Tradier itself enforces.
+    if body.quantity != int(body.quantity):
+        raise HTTPException(status_code=400, detail="Quantity must be a whole number of shares")
+
+    if hasattr(adapter, "get_market_clock"):
+        try:
+            clock = adapter.get_market_clock(conn)
+        except Exception:
+            clock = None
+        if clock and clock.get("state") != "open":
+            why = clock.get("description") or f"next change at {clock.get('next_change')}"
+            raise HTTPException(status_code=400, detail=f"Market is {clock.get('state', 'closed')} — {why}")
+
+    ref_price = body.limit_price
+    if ref_price is None and hasattr(adapter, "get_latest_quote"):
+        try:
+            quote = adapter.get_latest_quote(conn, body.ticker)
+            ref_price = quote.get("last") or quote.get("ask_price") or None
+        except Exception:
+            ref_price = None
+
+    if body.side == "buy":
+        try:
+            account = adapter.get_account(conn)
+            buying_power = float(account.get("buying_power") or 0)
+        except Exception:
+            buying_power = None
+        if ref_price and buying_power is not None:
+            est_cost = ref_price * body.quantity
+            if est_cost > buying_power:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient buying power: order costs ~${est_cost:,.2f}, ${buying_power:,.2f} available",
+                )
+    else:
+        try:
+            positions = adapter.get_positions(conn)
+            held = next((float(p["qty"]) for p in positions if p.get("symbol") == body.ticker), 0.0)
+        except Exception:
+            held = None
+        if held is not None and body.quantity > held:
+            raise HTTPException(
+                status_code=400,
+                detail=f"You hold {held:g} shares of {body.ticker} — cannot sell {body.quantity:g}",
+            )
+
+    if ref_price:
+        if body.stop_loss_price is not None:
+            if body.side == "buy" and body.stop_loss_price >= ref_price:
+                raise HTTPException(status_code=400, detail="Stop-loss must be below the entry price on a buy")
+            if body.side == "sell" and body.stop_loss_price <= ref_price:
+                raise HTTPException(status_code=400, detail="Stop-loss must be above the entry price on a sell")
+        if body.take_profit_price is not None:
+            if body.side == "buy" and body.take_profit_price <= ref_price:
+                raise HTTPException(status_code=400, detail="Take-profit must be above the entry price on a buy")
+            if body.side == "sell" and body.take_profit_price >= ref_price:
+                raise HTTPException(status_code=400, detail="Take-profit must be below the entry price on a sell")
+
     res = adapter.place_order(
         conn, body.ticker, Decimal(str(body.quantity)), body.side,
         order_type=body.order_type,

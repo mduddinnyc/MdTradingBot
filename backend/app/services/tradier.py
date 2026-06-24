@@ -114,6 +114,23 @@ def validate_and_get_account_id(api_key: str, api_secret: str, paper: bool) -> s
     return api_secret
 
 
+def get_market_clock(conn: BrokerConnection) -> dict:
+    """Real current market session state — used to block orders when the
+    market isn't open rather than guessing from local wall-clock + a
+    hardcoded holiday calendar."""
+    api_key, _ = _creds(conn)
+    base = _base(conn.is_paper)
+    data = _get(base, "/markets/clock", api_key)
+    clock = data.get("clock") or {}
+    return {
+        "state": clock.get("state"),
+        "description": clock.get("description"),
+        "next_state": clock.get("next_state"),
+        "next_change": clock.get("next_change"),
+        "date": clock.get("date"),
+    }
+
+
 def get_account(conn: BrokerConnection) -> dict:
     api_key, account_id = _creds(conn)
     base = _base(conn.is_paper)

@@ -86,13 +86,26 @@ export default function OrderTicket({
     },
   });
 
-  const formValid = qty > 0 && connId && (orderType === "market" || (limitPrice && parseFloat(limitPrice) > 0));
+  const slWrongSide = slEnabled && stopLossPrice != null && refPrice != null && (isBuy ? stopLossPrice >= refPrice : stopLossPrice <= refPrice);
+  const tpWrongSide = tpEnabled && takeProfitPrice != null && refPrice != null && (isBuy ? takeProfitPrice <= refPrice : takeProfitPrice >= refPrice);
+
+  const formValid =
+    qty > 0 &&
+    connId &&
+    (orderType === "market" || (limitPrice && parseFloat(limitPrice) > 0)) &&
+    !slWrongSide &&
+    !tpWrongSide;
+
   const disabledReason = !connId
     ? "Connect a broker to trade."
     : qty <= 0
     ? "Enter a quantity greater than 0."
     : orderType === "limit" && !(limitPrice && parseFloat(limitPrice) > 0)
     ? "Enter a limit price to continue."
+    : slWrongSide
+    ? `Stop-loss must be ${isBuy ? "below" : "above"} the entry price.`
+    : tpWrongSide
+    ? `Take-profit must be ${isBuy ? "above" : "below"} the entry price.`
     : "";
 
   return (
