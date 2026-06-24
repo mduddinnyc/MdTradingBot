@@ -3,18 +3,19 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { authApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { BarChart2, List, Zap, Settings, LogOut, ShoppingCart, Brain, Layers, FlaskConical, Flame } from "lucide-react";
+import { BarChart2, List, Zap, Settings, LogOut, ShoppingCart, Brain, Layers, FlaskConical, Flame, Link2 } from "lucide-react";
 
 const NAV = [
-  { href: "/dashboard",   label: "Dashboard",   icon: BarChart2 },
-  { href: "/watchlist",   label: "Watchlist",   icon: List },
-  { href: "/signals",     label: "Signals",     icon: Zap },
-  { href: "/day-trade",   label: "Day Trade Signal", icon: Flame },
-  { href: "/orders",      label: "Orders",      icon: ShoppingCart },
-  { href: "/automation",  label: "Automation",  icon: Settings },
-  { href: "/analysis",    label: "AI Analysis", icon: Brain },
-  { href: "/options",     label: "Options",     icon: Layers },
-  { href: "/backtest",    label: "Backtest",    icon: FlaskConical },
+  { href: "/dashboard",    label: "Dashboard",    icon: BarChart2 },
+  { href: "/watchlist",    label: "Watchlist",    icon: List },
+  { href: "/signals",      label: "Signals",      icon: Zap },
+  { href: "/day-trade",    label: "Day Trade Signal", icon: Flame },
+  { href: "/orders",       label: "Orders",       icon: ShoppingCart },
+  { href: "/automation",   label: "Automation",   icon: Settings },
+  { href: "/analysis",     label: "AI Analysis",  icon: Brain },
+  { href: "/options",      label: "Options",      icon: Layers },
+  { href: "/backtest",     label: "Backtest",     icon: FlaskConical },
+  { href: "/connections",  label: "Connect Your Trading Apps", icon: Link2 },
 ];
 
 export default function Navbar() {

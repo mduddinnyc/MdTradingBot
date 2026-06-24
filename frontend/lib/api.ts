@@ -149,7 +149,7 @@ export const signalApi = {
   automationUpdate: (id: string, body: object) =>
     api.patch(`/signals/automation/${id}`, body).then((r) => r.data),
 
-  orders: (limit = 100, period: "7d" | "30d" | "1y" | "all" = "all") =>
+  orders: (limit = 100, period: "today" | "7d" | "30d" | "1y" | "all" = "all") =>
     api.get("/signals/orders", { params: { limit, period } }).then((r) => r.data),
 
   emergencyStop: () => api.post("/signals/emergency-stop").then((r) => r.data),

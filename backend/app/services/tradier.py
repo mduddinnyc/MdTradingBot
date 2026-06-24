@@ -406,12 +406,28 @@ def get_latest_quote(conn: BrokerConnection, symbol: str) -> dict:
         quote = quote[0] if quote else {}
     quote = quote or {}
 
+    def f(key: str) -> float | None:
+        v = quote.get(key)
+        return float(v) if v is not None else None
+
     return {
         "symbol": symbol,
-        "ask_price": float(quote.get("ask", 0) or 0),
-        "bid_price": float(quote.get("bid", 0) or 0),
-        "ask_size": float(quote.get("asksize", 0) or 0),
-        "bid_size": float(quote.get("bidsize", 0) or 0),
+        "description": quote.get("description"),
+        "ask_price": f("ask") or 0.0,
+        "bid_price": f("bid") or 0.0,
+        "ask_size": f("asksize") or 0.0,
+        "bid_size": f("bidsize") or 0.0,
+        "last": f("last"),
+        "change": f("change"),
+        "change_percentage": f("change_percentage"),
+        "open": f("open"),
+        "high": f("high"),
+        "low": f("low"),
+        "prevclose": f("prevclose"),
+        "volume": f("volume"),
+        "average_volume": f("average_volume"),
+        "week_52_high": f("week_52_high"),
+        "week_52_low": f("week_52_low"),
         "timestamp": dt.datetime.utcnow().isoformat(),
     }
 

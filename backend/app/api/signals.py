@@ -594,7 +594,10 @@ async def get_orders(current_user: CurrentUser, db: DB, limit: int = 100, period
     """
     query = select(Order).where(Order.user_id == current_user.id)
     since = None
-    if period in _ORDER_HISTORY_RANGE_DAYS:
+    if period == "today":
+        since = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        query = query.where(Order.created_at >= since)
+    elif period in _ORDER_HISTORY_RANGE_DAYS:
         since = datetime.now(timezone.utc) - timedelta(days=_ORDER_HISTORY_RANGE_DAYS[period])
         query = query.where(Order.created_at >= since)
 

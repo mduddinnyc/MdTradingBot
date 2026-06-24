@@ -32,8 +32,23 @@ _DEFAULT_DISPLAY = {
 }
 
 
+MAX_CONNECTIONS_PER_USER = 10
+
+
 @router.post("/connect", response_model=BrokerConnectionResponse, status_code=status.HTTP_201_CREATED)
 async def connect_broker(body: BrokerConnectRequest, request: Request, current_user: CurrentUser, db: DB):
+    result = await db.execute(
+        select(BrokerConnection).where(
+            BrokerConnection.user_id == current_user.id,
+            BrokerConnection.is_active == True,
+        )
+    )
+    if len(result.scalars().all()) >= MAX_CONNECTIONS_PER_USER:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum of {MAX_CONNECTIONS_PER_USER} connected apps reached. Disconnect one before adding another.",
+        )
+
     adapter = get_adapter(body.broker_name)
     account_id = adapter.validate_and_get_account_id(body.api_key, body.api_secret, body.is_paper)
 

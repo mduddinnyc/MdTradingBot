@@ -17,6 +17,7 @@ const statusColor: Record<string, string> = {
 };
 
 const PERIODS = [
+  { key: "today", label: "Today" },
   { key: "7d", label: "7D" },
   { key: "30d", label: "30D" },
   { key: "1y", label: "1Y" },

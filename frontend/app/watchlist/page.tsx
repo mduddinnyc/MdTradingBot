@@ -1,27 +1,55 @@
 "use client";
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { brokerApi, signalApi } from "@/lib/api";
-import { useForm } from "react-hook-form";
-import { X, Plus, RefreshCw, Link as LinkIcon } from "lucide-react";
+import { fmtUsd, fmtPct, cn } from "@/lib/utils";
+import { X, Plus, Search, Link2 } from "lucide-react";
 import CandleChart from "@/components/CandleChart";
+
+const RANGES = [
+  { key: "1H", timeframe: "1Min", limit: 60 },
+  { key: "1D", timeframe: "5Min", limit: 78 },
+  { key: "7D", timeframe: "1Hour", limit: 49 },
+  { key: "30D", timeframe: "1Day", limit: 30 },
+  { key: "12M", timeframe: "1Day", limit: 252 },
+  { key: "5Y", timeframe: "1Day", limit: 1260 },
+] as const;
+type RangeKey = (typeof RANGES)[number]["key"];
 
 export default function WatchlistPage() {
   const qc = useQueryClient();
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
-  const [chartTf, setChartTf] = useState("1Hour");
-  const [brokerForm, setBrokerForm] = useState(false);
-  const [connError, setConnError] = useState("");
+  const [range, setRange] = useState<RangeKey>("1D");
+  const [searchValue, setSearchValue] = useState("");
 
   const { data: watchlist = [] } = useQuery({ queryKey: ["watchlist"], queryFn: signalApi.watchlist });
   const { data: connections = [] } = useQuery({ queryKey: ["connections"], queryFn: brokerApi.list });
   const conn = connections[0];
 
-  // Bars for selected ticker
+  const rangeCfg = RANGES.find((r) => r.key === range)!;
   const { data: bars = [] } = useQuery({
-    queryKey: ["bars", conn?.id, selectedTicker, chartTf],
-    queryFn: () => brokerApi.bars(conn.id, selectedTicker!, chartTf),
+    queryKey: ["bars", conn?.id, selectedTicker, range],
+    queryFn: () => brokerApi.bars(conn.id, selectedTicker!, rangeCfg.timeframe, rangeCfg.limit),
     enabled: !!conn && !!selectedTicker,
+  });
+
+  const { data: quote } = useQuery({
+    queryKey: ["quote", conn?.id, selectedTicker],
+    queryFn: () => brokerApi.quote(conn.id, selectedTicker!),
+    enabled: !!conn && !!selectedTicker,
+    refetchInterval: 10_000,
+  });
+
+  // Lightweight last/change per row so the list itself carries real info,
+  // not just the selected ticker's detail panel.
+  const rowQuotes = useQueries({
+    queries: watchlist.map((w: any) => ({
+      queryKey: ["quote", conn?.id, w.ticker],
+      queryFn: () => brokerApi.quote(conn.id, w.ticker),
+      enabled: !!conn,
+      refetchInterval: 15_000,
+    })),
   });
 
   const addMut = useMutation({
@@ -31,101 +59,47 @@ export default function WatchlistPage() {
 
   const removeMut = useMutation({
     mutationFn: (ticker: string) => signalApi.removeFromWatchlist(ticker),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["watchlist"] }),
-  });
-
-  const connectMut = useMutation({
-    mutationFn: (d: { broker_name: string; api_key: string; api_secret: string; is_paper: boolean }) =>
-      brokerApi.connect(d.broker_name, d.api_key, d.api_secret, d.is_paper),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["connections"] });
-      setBrokerForm(false);
-      setConnError("");
+      qc.invalidateQueries({ queryKey: ["watchlist"] });
+      setSelectedTicker((t) => (t && watchlist.find((w: any) => w.ticker === t) ? t : null));
     },
-    onError: (e: any) => setConnError(e.response?.data?.detail || "Connection failed"),
   });
 
-  const { register: reg, handleSubmit, reset } = useForm<{ ticker: string }>();
-  const { register: regB, handleSubmit: submitB, watch: watchB } = useForm<{ broker_name: string; api_key: string; api_secret: string; is_paper: boolean }>({
-    defaultValues: { broker_name: "tradier", is_paper: true },
-  });
-  const selectedBroker = watchB("broker_name");
-
-  const FIELD_LABELS: Record<string, { key: string; keyPlaceholder: string; secret: string; secretPlaceholder: string }> = {
-    tradier:    { key: "Access Token",    keyPlaceholder: "Tradier access token", secret: "Account Number", secretPlaceholder: "e.g. VA12345678" },
-    webull:     { key: "App Key",         keyPlaceholder: "Webull App Key",       secret: "App Secret",     secretPlaceholder: "Webull App Secret" },
-    alpaca:     { key: "API Key",         keyPlaceholder: "PK...",                secret: "API Secret",     secretPlaceholder: "Enter secret…" },
-    ibkr:       { key: "Gateway Host",    keyPlaceholder: "127.0.0.1",            secret: "Gateway Port",   secretPlaceholder: "7497 (paper) / 7496 (live)" },
-    tastytrade: { key: "Username",        keyPlaceholder: "Enter username…",      secret: "Password",       secretPlaceholder: "Enter password…" },
-  };
-  const labels = FIELD_LABELS[selectedBroker] || FIELD_LABELS.tradier;
-
-  const onAddTicker = (d: { ticker: string }) => {
-    addMut.mutate(d.ticker.toUpperCase());
-    reset();
+  const onSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const ticker = searchValue.trim().toUpperCase();
+    if (!ticker) return;
+    addMut.mutate(ticker);
+    setSearchValue("");
   };
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Watchlist</h1>
 
-      {/* Broker connection */}
-      {!conn ? (
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold flex items-center gap-2"><LinkIcon size={16} />Connect Broker</h2>
-          </div>
-          {!brokerForm ? (
-            <button className="btn-primary" onClick={() => setBrokerForm(true)}>Connect account</button>
-          ) : (
-            <form onSubmit={submitB((d) => connectMut.mutate(d))} className="space-y-3 max-w-sm">
-              <div>
-                <label className="label">Broker</label>
-                <select className="input" {...regB("broker_name")}>
-                  <option value="tradier">Tradier (recommended)</option>
-                  <option value="ibkr">Interactive Brokers</option>
-                  <option value="alpaca">Alpaca</option>
-                  <option value="webull">Webull</option>
-                  <option value="tastytrade">tastytrade</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">{labels.key}</label>
-                <input className="input font-mono text-xs" {...regB("api_key")} placeholder={labels.keyPlaceholder} />
-              </div>
-              <div>
-                <label className="label">{labels.secret}</label>
-                <input className="input font-mono text-xs" {...regB("api_secret")} placeholder={labels.secretPlaceholder} type={selectedBroker === "tradier" ? "text" : "password"} />
-              </div>
-              <div className="flex items-center gap-2">
-                <input type="checkbox" id="paper" {...regB("is_paper")} />
-                <label htmlFor="paper" className="text-sm text-gray-300">
-                  {selectedBroker === "tradier" ? "Sandbox (paper) — uses sandbox.tradier.com" : "Paper / demo account"}
-                </label>
-              </div>
-              {connError && <p className="text-sell text-sm">{connError}</p>}
-              <div className="flex gap-2">
-                <button type="submit" className="btn-primary" disabled={connectMut.isPending}>
-                  {connectMut.isPending ? "Connecting…" : "Connect"}
-                </button>
-                <button type="button" className="btn-ghost" onClick={() => setBrokerForm(false)}>Cancel</button>
-              </div>
-            </form>
-          )}
-        </div>
-      ) : (
-        <div className="card flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full bg-buy" />
-          <span className="text-sm font-medium">{conn.display_name}</span>
-          <span className="text-xs text-gray-400">{conn.is_paper ? "Paper" : "Live"}</span>
+      {!conn && (
+        <div className="card flex items-center justify-between">
+          <p className="text-sm text-gray-400">Connect a broker to see live prices and charts.</p>
+          <Link href="/connections" className="btn-primary flex items-center gap-2 text-sm">
+            <Link2 size={14} /> Connect Your Trading Apps
+          </Link>
         </div>
       )}
 
-      {/* Add ticker */}
+      {/* Search / add ticker */}
       <div className="card">
-        <h2 className="font-semibold mb-3">Add Symbol</h2>
-        <form onSubmit={handleSubmit(onAddTicker)} className="flex gap-2">
-          <input className="input w-40 uppercase" {...reg("ticker")} placeholder="AAPL" maxLength={10} />
+        <h2 className="font-semibold mb-3">Add to Watchlist</h2>
+        <form onSubmit={onSearchSubmit} className="flex gap-2">
+          <div className="relative flex-1 max-w-sm">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              className="input pl-9 uppercase"
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              placeholder="Search ticker symbol… e.g. AAPL"
+              maxLength={10}
+            />
+          </div>
           <button type="submit" className="btn-primary flex items-center gap-1" disabled={addMut.isPending}>
             <Plus size={14} /> Add
           </button>
@@ -141,23 +115,38 @@ export default function WatchlistPage() {
             <p className="text-gray-400 text-sm">No symbols yet.</p>
           ) : (
             <ul className="space-y-1">
-              {watchlist.map((w: any) => (
-                <li
-                  key={w.ticker}
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-                    selectedTicker === w.ticker ? "bg-brand/10 text-brand" : "hover:bg-gray-800"
-                  }`}
-                  onClick={() => setSelectedTicker(w.ticker)}
-                >
-                  <span className="font-mono font-bold text-sm">{w.ticker}</span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); removeMut.mutate(w.ticker); }}
-                    className="text-gray-500 hover:text-sell transition-colors"
+              {watchlist.map((w: any, i: number) => {
+                const q = rowQuotes[i]?.data as any;
+                const changeUp = q?.change != null && q.change >= 0;
+                return (
+                  <li
+                    key={w.ticker}
+                    className={cn(
+                      "flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-colors",
+                      selectedTicker === w.ticker ? "bg-brand/10 text-brand" : "hover:bg-gray-800"
+                    )}
+                    onClick={() => setSelectedTicker(w.ticker)}
                   >
-                    <X size={14} />
-                  </button>
-                </li>
-              ))}
+                    <span className="font-mono font-bold text-sm">{w.ticker}</span>
+                    <div className="flex items-center gap-3">
+                      {q?.last != null && (
+                        <span className="text-xs text-right">
+                          <span className="text-gray-300">{fmtUsd(q.last)}</span>{" "}
+                          <span className={changeUp ? "text-buy" : "text-sell"}>
+                            {changeUp ? "+" : ""}{q.change?.toFixed(2)}
+                          </span>
+                        </span>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeMut.mutate(w.ticker); }}
+                        className="text-gray-500 hover:text-sell transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -167,19 +156,65 @@ export default function WatchlistPage() {
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold font-mono">{selectedTicker}</h2>
               <div className="flex gap-1">
-                {["1Hour", "1Day"].map((tf) => (
+                {RANGES.map((r) => (
                   <button
-                    key={tf}
-                    onClick={() => setChartTf(tf)}
-                    className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                      chartTf === tf ? "bg-brand text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
-                    }`}
+                    key={r.key}
+                    onClick={() => setRange(r.key)}
+                    className={cn(
+                      "px-2 py-1 rounded text-xs font-medium transition-colors",
+                      range === r.key ? "bg-brand text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                    )}
                   >
-                    {tf === "1Hour" ? "1H" : "1D"}
+                    {r.key}
                   </button>
                 ))}
               </div>
             </div>
+
+            {quote && (
+              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3 mb-4 text-xs">
+                <div>
+                  <p className="text-gray-500">Last</p>
+                  <p className="font-bold">{quote.last != null ? fmtUsd(quote.last) : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Change</p>
+                  <p className={cn("font-bold", (quote.change ?? 0) >= 0 ? "text-buy" : "text-sell")}>
+                    {quote.change != null ? `${quote.change >= 0 ? "+" : ""}${quote.change.toFixed(2)}` : "—"}
+                    {quote.change_percentage != null && ` (${fmtPct(quote.change_percentage / 100)})`}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Open</p>
+                  <p>{quote.open != null ? fmtUsd(quote.open) : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">High</p>
+                  <p>{quote.high != null ? fmtUsd(quote.high) : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Low</p>
+                  <p>{quote.low != null ? fmtUsd(quote.low) : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Prev Close</p>
+                  <p>{quote.prevclose != null ? fmtUsd(quote.prevclose) : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Volume</p>
+                  <p>{quote.volume != null ? quote.volume.toLocaleString() : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">52W Range</p>
+                  <p>
+                    {quote.week_52_low != null && quote.week_52_high != null
+                      ? `${fmtUsd(quote.week_52_low)} – ${fmtUsd(quote.week_52_high)}`
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+            )}
+
             <CandleChart bars={bars} height={300} />
           </div>
         )}
