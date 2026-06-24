@@ -7,3 +7,4 @@ frontend/.next/
 frontend/test-results/
 frontend/playwright-report/
 *.pyc
+.DS_Store
