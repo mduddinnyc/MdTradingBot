@@ -10,7 +10,6 @@ import { Flame, TrendingUp, TrendingDown, X, Loader2 } from "lucide-react";
 const TIER_META: Record<string, { title: string; sub: string; cls: string; dot: string }> = {
   green:        { title: "Top Picks",    sub: "Rank 1–20",  cls: "border-buy/40 bg-buy/5",      dot: "bg-buy" },
   light_green:  { title: "Strong Picks", sub: "Rank 21–40", cls: "border-buy/20 bg-buy/[0.02]", dot: "bg-buy/60" },
-  light_yellow: { title: "Watch List",   sub: "Rank 41–60", cls: "border-hold/30 bg-hold/5",    dot: "bg-hold/70" },
 };
 
 function OptionBadge({ type }: { type: string }) {
@@ -246,7 +245,6 @@ export default function DayTradePage() {
 
   const greenRows = ranked.filter((s: any) => s.tier === "green");
   const lightGreenRows = ranked.filter((s: any) => s.tier === "light_green");
-  const lightYellowRows = ranked.filter((s: any) => s.tier === "light_yellow");
 
   return (
     <div className="space-y-6">
@@ -264,10 +262,9 @@ export default function DayTradePage() {
         live options chain, and strategy recommendation.
       </p>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <TierPanel tier="green" rows={greenRows} onSelect={setSelected} selected={selected} />
         <TierPanel tier="light_green" rows={lightGreenRows} onSelect={setSelected} selected={selected} />
-        <TierPanel tier="light_yellow" rows={lightYellowRows} onSelect={setSelected} selected={selected} />
       </div>
 
       {selected && <DetailPanel ticker={selected} onClose={() => setSelected(null)} />}
