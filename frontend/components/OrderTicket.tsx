@@ -134,10 +134,21 @@ export default function OrderTicket({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label">Order Type</label>
-                <select className="input" value={orderType} onChange={(e) => setOrderType(e.target.value as OrderType)}>
-                  <option value="market">Market</option>
-                  <option value="limit">Limit</option>
-                </select>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(["market", "limit"] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setOrderType(t)}
+                      className={cn(
+                        "py-2 rounded-lg text-sm font-semibold capitalize transition-colors",
+                        orderType === t ? "bg-brand text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      )}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div>
                 <label className="label">Quantity</label>
@@ -148,7 +159,19 @@ export default function OrderTicket({
             {orderType === "limit" && (
               <div>
                 <label className="label">Limit Price</label>
-                <input className="input" type="number" min="0" step="0.01" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} placeholder={quote?.last ? quote.last.toFixed(2) : "0.00"} />
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={limitPrice}
+                  onChange={(e) => setLimitPrice(e.target.value)}
+                  placeholder={quote?.last ? quote.last.toFixed(2) : "0.00"}
+                  autoFocus
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  {quote?.last != null ? `Current: ${fmtUsd(quote.last)}` : "Enter your price"}
+                </p>
               </div>
             )}
 
