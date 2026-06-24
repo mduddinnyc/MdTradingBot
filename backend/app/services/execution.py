@@ -16,7 +16,6 @@ from app.core.audit import log as audit_log
 from app.models.automation import AutomationConfig, Order
 from app.models.broker import BrokerConnection
 from app.models.signal import Signal
-from app.services import alpaca as alpaca_svc
 from app.services.broker_adapter import get_adapter
 
 PDT_WINDOW_DAYS = 5   # rolling window FINRA uses
@@ -35,9 +34,11 @@ class ValidationResult:
 
 async def _todays_realized_loss(db: AsyncSession, user_id: uuid.UUID, conn_id: uuid.UUID) -> float:
     """
-    Approximate daily loss: for each filled automated sell/buy today,
-    use (stop_price - avg_fill_price) * filled_quantity as the worst-case
-    loss already risked. Returns negative when positions went against us.
+    Approximate daily loss: for each filled sell/buy today (manual or
+    automated — PDT/loss limits apply regardless of how the trade was
+    placed), use (stop_price - avg_fill_price) * filled_quantity as the
+    worst-case loss already risked. Returns negative when positions went
+    against us.
     """
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     result = await db.execute(
@@ -47,7 +48,6 @@ async def _todays_realized_loss(db: AsyncSession, user_id: uuid.UUID, conn_id: u
             Order.user_id == user_id,
             Order.broker_connection_id == conn_id,
             Order.status == "filled",
-            Order.is_automated == True,
             Order.filled_at >= today_start,
             Order.stop_price.isnot(None),
             Order.avg_fill_price.isnot(None),
@@ -63,7 +63,6 @@ async def _open_position_count(db: AsyncSession, user_id: uuid.UUID, conn_id: uu
             Order.user_id == user_id,
             Order.broker_connection_id == conn_id,
             Order.status.in_(["pending", "submitted", "partially_filled"]),
-            Order.is_automated == True,
         )
     )
     return result.scalar_one() or 0
@@ -87,7 +86,6 @@ async def _day_trade_count(db: AsyncSession, user_id: uuid.UUID, conn_id: uuid.U
             Order.user_id == user_id,
             Order.broker_connection_id == conn_id,
             Order.status == "filled",
-            Order.is_automated == True,
             Order.filled_at >= window_start,
         ).group_by(Order.ticker, func.date(Order.filled_at), Order.side)
     )
@@ -207,9 +205,25 @@ async def execute_signal(
         log.info("Order rejected for %s: %s", ticker, validation.reason)
         return order
 
-    # Compute qty from position size
+    # Compute qty from position size — whole shares only, Tradier (and
+    # equities generally) rejects fractional quantities on plain orders.
     entry_price = signal.entry_price or 1.0
-    qty = Decimal(str(round(validation.position_size_usd / entry_price, 2)))
+    qty = Decimal(int(validation.position_size_usd / entry_price))
+    if qty < 1:
+        order = Order(
+            user_id=config.user_id,
+            broker_connection_id=conn.id,
+            signal_id=signal.id,
+            ticker=ticker,
+            side="buy" if signal.signal_type == "BUY" else "sell",
+            quantity=0,
+            status="rejected",
+            is_automated=True,
+            rejection_reason=f"Position size ${validation.position_size_usd:.2f} buys less than 1 share at ${entry_price:.2f}",
+        )
+        db.add(order)
+        await db.flush()
+        return order
 
     # Compute bracket prices
     side = "buy" if signal.signal_type == "BUY" else "sell"
@@ -221,6 +235,7 @@ async def execute_signal(
         stop_loss = Decimal(str(round(entry_price * (1 + config.stop_loss_pct), 2)))
 
     try:
+        adapter = get_adapter(conn.broker_name)
         result = adapter.place_bracket_order(
             conn=conn,
             symbol=ticker,

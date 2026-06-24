@@ -258,40 +258,106 @@ def get_orders(conn: BrokerConnection, status: str = "all", limit: int = 50) -> 
     return result
 
 
-def place_bracket_order(
+def place_order(
     conn: BrokerConnection,
     symbol: str,
     qty: Decimal,
     side: str,
-    take_profit_price: Decimal,
-    stop_loss_price: Decimal,
+    order_type: str = "market",
+    limit_price: Decimal | None = None,
+    take_profit_price: Decimal | None = None,
+    stop_loss_price: Decimal | None = None,
 ) -> dict:
+    """
+    Single equity order, optionally bracketed with a take-profit and/or
+    stop-loss exit leg. Tradier order `class` follows from what's supplied:
+    neither TP/SL -> plain `equity` order; exactly one -> `oto` (2 legs);
+    both -> `otoco` (3 legs — the shape the automated path has always used,
+    via the place_bracket_order wrapper below).
+    """
     api_key, account_id = _creds(conn)
     base = _base(conn.is_paper)
-
     exit_side = "sell" if side == "buy" else "buy"
 
-    # Native OTOCO: entry (market) + take-profit (limit) + stop-loss (stop)
-    form = {
-        "class": "otoco",
+    # Tradier rejects more than 2 decimal places on price/stop fields —
+    # percent-derived brackets (e.g. entry * 0.9) routinely produce more.
+    cents = Decimal("0.01")
+    if limit_price is not None:
+        limit_price = limit_price.quantize(cents)
+    if take_profit_price is not None:
+        take_profit_price = take_profit_price.quantize(cents)
+    if stop_loss_price is not None:
+        stop_loss_price = stop_loss_price.quantize(cents)
+
+    if take_profit_price is None and stop_loss_price is None:
+        # Plain single-leg order — Tradier rejects indexed leg[N] params
+        # ("legs are not allowed for this order class") unless class is
+        # oto/otoco/multileg/combo, so this must use flat (unindexed) keys.
+        form = {
+            "class": "equity",
+            "symbol": symbol,
+            "side": side,
+            "quantity": str(qty),
+            "type": order_type,
+            "duration": "day",
+        }
+        if order_type == "limit" and limit_price is not None:
+            form["price"] = str(limit_price)
+        data = _post_form(base, f"/accounts/{account_id}/orders", api_key, form)
+        order = data.get("order") or {}
+        return {
+            "id": str(order.get("id", "")),
+            "symbol": symbol,
+            "qty": str(qty),
+            "side": side,
+            "status": str(order.get("status", "pending")).lower(),
+            "order_class": "equity",
+        }
+
+    entry_type = order_type
+    entry_price = limit_price
+    if entry_type == "market":
+        # Tradier rejects a market order as the first leg of an oto/otoco
+        # order ("OtoFirstLegIsMarketNotAllowed") — any bracket forces a
+        # real price. Use a marketable limit at the current quote, which
+        # fills just as immediately in practice for a liquid symbol.
+        entry_type = "limit"
+        if entry_price is None:
+            q = get_latest_quote(conn, symbol)
+            entry_price = Decimal(str(q.get("last") or q["ask_price"])).quantize(cents)
+
+    entry = {
         "duration[0]": "day",
         "symbol[0]": symbol,
         "side[0]": side,
         "quantity[0]": str(qty),
-        "type[0]": "market",
-        "duration[1]": "gtc",
-        "symbol[1]": symbol,
-        "side[1]": exit_side,
-        "quantity[1]": str(qty),
-        "type[1]": "limit",
-        "price[1]": str(take_profit_price),
-        "duration[2]": "gtc",
-        "symbol[2]": symbol,
-        "side[2]": exit_side,
-        "quantity[2]": str(qty),
-        "type[2]": "stop",
-        "stop[2]": str(stop_loss_price),
+        "type[0]": entry_type,
+        "price[0]": str(entry_price),
     }
+
+    if take_profit_price is not None and stop_loss_price is not None:
+        form = {
+            "class": "otoco",
+            **entry,
+            "duration[1]": "gtc", "symbol[1]": symbol, "side[1]": exit_side,
+            "quantity[1]": str(qty), "type[1]": "limit", "price[1]": str(take_profit_price),
+            "duration[2]": "gtc", "symbol[2]": symbol, "side[2]": exit_side,
+            "quantity[2]": str(qty), "type[2]": "stop", "stop[2]": str(stop_loss_price),
+        }
+    else:
+        exit_leg = (
+            {"type[1]": "limit", "price[1]": str(take_profit_price)}
+            if take_profit_price is not None
+            else {"type[1]": "stop", "stop[1]": str(stop_loss_price)}
+        )
+        form = {
+            "class": "oto",
+            **entry,
+            "duration[1]": "gtc", "symbol[1]": symbol, "side[1]": exit_side,
+            "quantity[1]": str(qty),
+            **exit_leg,
+        }
+
     data = _post_form(base, f"/accounts/{account_id}/orders", api_key, form)
     order = data.get("order") or {}
     return {
@@ -300,8 +366,22 @@ def place_bracket_order(
         "qty": str(qty),
         "side": side,
         "status": str(order.get("status", "pending")).lower(),
-        "order_class": "bracket",
+        "order_class": form["class"],
     }
+
+
+def place_bracket_order(
+    conn: BrokerConnection,
+    symbol: str,
+    qty: Decimal,
+    side: str,
+    take_profit_price: Decimal,
+    stop_loss_price: Decimal,
+) -> dict:
+    return place_order(
+        conn, symbol, qty, side,
+        take_profit_price=take_profit_price, stop_loss_price=stop_loss_price,
+    )
 
 
 def place_option_order(

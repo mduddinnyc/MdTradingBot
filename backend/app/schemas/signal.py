@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class SignalResponse(BaseModel):
@@ -64,6 +64,45 @@ class AutomationConfigResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ManualOrderRequest(BaseModel):
+    broker_connection_id: uuid.UUID
+    ticker: str
+    side: str
+    quantity: float
+    order_type: str = "market"
+    limit_price: float | None = None
+    take_profit_price: float | None = None
+    stop_loss_price: float | None = None
+
+    @field_validator("ticker")
+    @classmethod
+    def upper_ticker(cls, v: str) -> str:
+        return v.upper().strip()
+
+    @field_validator("side")
+    @classmethod
+    def valid_side(cls, v: str) -> str:
+        v = v.lower().strip()
+        if v not in ("buy", "sell"):
+            raise ValueError("side must be 'buy' or 'sell'")
+        return v
+
+    @field_validator("order_type")
+    @classmethod
+    def valid_order_type(cls, v: str) -> str:
+        v = v.lower().strip()
+        if v not in ("market", "limit"):
+            raise ValueError("order_type must be 'market' or 'limit'")
+        return v
+
+    @field_validator("quantity")
+    @classmethod
+    def positive_quantity(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("quantity must be positive")
+        return v
 
 
 class OrderResponse(BaseModel):

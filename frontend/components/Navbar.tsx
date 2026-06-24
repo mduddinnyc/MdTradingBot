@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { authApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { BarChart2, List, Zap, Settings, LogOut, ShoppingCart, Brain, Layers, FlaskConical, Flame, Link2 } from "lucide-react";
+import LiveClock from "@/components/LiveClock";
 
 const NAV = [
   { href: "/dashboard",    label: "Dashboard",    icon: BarChart2 },
@@ -29,7 +30,10 @@ export default function Navbar() {
 
   return (
     <nav className="w-56 min-h-screen bg-gray-900 border-r border-gray-800 flex flex-col p-4">
-      <div className="text-lg font-bold text-brand mb-8 px-2">TradingAI</div>
+      <div className="text-lg font-bold text-brand mb-3 px-2">TradingAI</div>
+      <div className="mb-8">
+        <LiveClock />
+      </div>
 
       <div className="flex-1 space-y-1">
         {NAV.map(({ href, label, icon: Icon }) => (

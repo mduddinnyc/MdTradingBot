@@ -1,5 +1,7 @@
+import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Request
@@ -16,6 +18,7 @@ from app.schemas.auth import MessageResponse
 from app.schemas.signal import (
     AutomationConfigRequest,
     AutomationConfigResponse,
+    ManualOrderRequest,
     OptionsAutomationConfigRequest,
     OptionsAutomationConfigResponse,
     OrderResponse,
@@ -552,7 +555,7 @@ async def approve_pending_option_order(order_id: uuid.UUID, request: Request, cu
     order = await opt_exec.approve_staged_order(db, conn, order)
 
     await audit_log(
-        db, action="OPTIONS_ORDER_APPROVED", outcome="success" if order.status == "submitted" else "blocked",
+        db, action="OPTIONS_ORDER_APPROVED", outcome="success" if order.status in ("submitted", "filled") else "blocked",
         user_id=current_user.id, resource_type="order", resource_id=order.id, request=request,
         metadata={"ticker": order.ticker, "option_symbol": order.option_symbol, "status": order.status},
     )
@@ -636,6 +639,93 @@ async def get_orders(current_user: CurrentUser, db: DB, limit: int = 100, period
             unmatched.remove(best)
 
     return responses
+
+
+@router.post("/orders/manual", response_model=OrderResponse, status_code=201)
+async def place_manual_order(body: ManualOrderRequest, request: Request, current_user: CurrentUser, db: DB):
+    """
+    User-initiated equity order placed directly through the order ticket —
+    not gated by AutomationConfig rules (confidence thresholds, cooldowns,
+    regime filters), since those are automated-strategy concerns, not
+    relevant to a trade the user is consciously placing themselves.
+    """
+    result = await db.execute(
+        select(BrokerConnection).where(
+            BrokerConnection.id == body.broker_connection_id,
+            BrokerConnection.user_id == current_user.id,
+            BrokerConnection.is_active == True,
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=404, detail="Broker connection not found")
+
+    adapter = get_adapter(conn.broker_name)
+    if not hasattr(adapter, "place_order"):
+        raise HTTPException(status_code=501, detail=f"{conn.broker_name} does not support manual order placement yet")
+
+    res = adapter.place_order(
+        conn, body.ticker, Decimal(str(body.quantity)), body.side,
+        order_type=body.order_type,
+        limit_price=Decimal(str(body.limit_price)) if body.limit_price is not None else None,
+        take_profit_price=Decimal(str(body.take_profit_price)) if body.take_profit_price is not None else None,
+        stop_loss_price=Decimal(str(body.stop_loss_price)) if body.stop_loss_price is not None else None,
+    )
+
+    order = Order(
+        user_id=current_user.id,
+        broker_connection_id=conn.id,
+        ticker=body.ticker,
+        order_type=body.order_type,
+        side=body.side,
+        quantity=body.quantity,
+        limit_price=body.limit_price,
+        take_profit_price=body.take_profit_price,
+        stop_price=body.stop_loss_price,
+        broker_order_id=res.get("id") or None,
+        status=res.get("status") or "submitted",
+        is_automated=False,
+        asset_type="equity",
+        submitted_at=datetime.now(timezone.utc),
+    )
+
+    # Tradier paper market orders often fill within the same request cycle —
+    # reflect that immediately instead of leaving the order stuck at
+    # "submitted" when it's actually already filled (same pattern used for
+    # option orders in options_execution.py::approve_staged_order). A single
+    # immediate check sometimes races ahead of Tradier registering the fill,
+    # so retry briefly rather than give up after one look.
+    if hasattr(adapter, "get_orders") and order.broker_order_id:
+        for attempt in range(3):
+            if attempt:
+                await asyncio.sleep(0.4)
+            try:
+                matches = [o for o in adapter.get_orders(conn, status="all", limit=50) if str(o.get("id")) == str(order.broker_order_id)]
+            except Exception:
+                break
+            if not matches:
+                continue
+            live = matches[0]
+            if live.get("status") == "filled":
+                order.status = "filled"
+                order.filled_quantity = float(live.get("filled_qty") or body.quantity)
+                order.avg_fill_price = float(live.get("filled_avg_price") or 0) or None
+                order.filled_at = datetime.now(timezone.utc)
+                break
+            if live.get("status") in ("rejected", "canceled", "expired"):
+                order.status = live["status"]
+                order.rejection_reason = live.get("reason_description") or order.rejection_reason
+                break
+
+    db.add(order)
+    await db.flush()
+
+    await audit_log(
+        db, action="MANUAL_ORDER_PLACED", outcome="success" if order.status in ("submitted", "filled") else "blocked",
+        user_id=current_user.id, resource_type="order", resource_id=order.id, request=request,
+        metadata={"ticker": order.ticker, "side": order.side, "status": order.status},
+    )
+    return order
 
 
 # ── PDT status ─────────────────────────────────────────────────

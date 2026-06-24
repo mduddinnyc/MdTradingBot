@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { signalApi } from "@/lib/api";
 import { fmtUsd, fmtPct } from "@/lib/utils";
 import CandleChart from "@/components/CandleChart";
+import OrderTicket from "@/components/OrderTicket";
 import { Flame, TrendingUp, TrendingDown, X, Loader2 } from "lucide-react";
 
 const TIER_META: Record<string, { title: string; sub: string; cls: string; dot: string }> = {
@@ -70,6 +71,7 @@ function TierPanel({ tier, rows, onSelect, selected }: { tier: string; rows: any
 }
 
 function DetailPanel({ ticker, onClose }: { ticker: string; onClose: () => void }) {
+  const [orderSide, setOrderSide] = useState<"buy" | "sell" | null>(null);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["signal-detail", ticker],
     queryFn: () => signalApi.detail(ticker),
@@ -99,6 +101,23 @@ function DetailPanel({ ticker, onClose }: { ticker: string; onClose: () => void 
           ) : (
             <div className="text-center py-8 text-gray-500 text-sm bg-gray-900/40 rounded-lg">
               No chart data — connect a broker to pull real bars for {ticker}.
+            </div>
+          )}
+
+          {data.signal && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setOrderSide("buy")}
+                className="flex-1 py-2 rounded-lg font-bold text-sm bg-buy text-white hover:bg-buy/80 transition-colors"
+              >
+                Buy
+              </button>
+              <button
+                onClick={() => setOrderSide("sell")}
+                className="flex-1 py-2 rounded-lg font-bold text-sm bg-sell text-white hover:bg-sell/80 transition-colors"
+              >
+                Sell
+              </button>
             </div>
           )}
 
@@ -207,6 +226,10 @@ function DetailPanel({ ticker, onClose }: { ticker: string; onClose: () => void 
             <p className="text-xs text-hold">Connect a broker in Watchlist to pull live bars and options chain.</p>
           )}
         </div>
+      )}
+
+      {orderSide && (
+        <OrderTicket ticker={ticker} defaultSide={orderSide} onClose={() => setOrderSide(null)} />
       )}
     </div>
   );

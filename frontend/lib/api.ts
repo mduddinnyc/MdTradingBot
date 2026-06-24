@@ -152,6 +152,17 @@ export const signalApi = {
   orders: (limit = 100, period: "today" | "7d" | "30d" | "1y" | "all" = "all") =>
     api.get("/signals/orders", { params: { limit, period } }).then((r) => r.data),
 
+  placeManualOrder: (body: {
+    broker_connection_id: string;
+    ticker: string;
+    side: "buy" | "sell";
+    quantity: number;
+    order_type?: "market" | "limit";
+    limit_price?: number | null;
+    take_profit_price?: number | null;
+    stop_loss_price?: number | null;
+  }) => api.post("/signals/orders/manual", body).then((r) => r.data),
+
   emergencyStop: () => api.post("/signals/emergency-stop").then((r) => r.data),
 
   pdtStatus: () => api.get("/signals/pdt-status").then((r) => r.data),

@@ -6,6 +6,7 @@ import { brokerApi, signalApi } from "@/lib/api";
 import { fmtUsd, fmtPct, cn } from "@/lib/utils";
 import { X, Plus, Search, Link2 } from "lucide-react";
 import CandleChart from "@/components/CandleChart";
+import OrderTicket from "@/components/OrderTicket";
 
 const RANGES = [
   { key: "1H", timeframe: "1Min", limit: 60 },
@@ -22,6 +23,7 @@ export default function WatchlistPage() {
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>("1D");
   const [searchValue, setSearchValue] = useState("");
+  const [orderSide, setOrderSide] = useState<"buy" | "sell" | null>(null);
 
   const { data: watchlist = [] } = useQuery({ queryKey: ["watchlist"], queryFn: signalApi.watchlist });
   const { data: connections = [] } = useQuery({ queryKey: ["connections"], queryFn: brokerApi.list });
@@ -155,19 +157,29 @@ export default function WatchlistPage() {
           <div className="card lg:col-span-2">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold font-mono">{selectedTicker}</h2>
-              <div className="flex gap-1">
-                {RANGES.map((r) => (
-                  <button
-                    key={r.key}
-                    onClick={() => setRange(r.key)}
-                    className={cn(
-                      "px-2 py-1 rounded text-xs font-medium transition-colors",
-                      range === r.key ? "bg-brand text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
-                    )}
-                  >
-                    {r.key}
+              <div className="flex items-center gap-3">
+                <div className="flex gap-1.5">
+                  <button onClick={() => setOrderSide("buy")} className="px-3 py-1 rounded text-xs font-bold bg-buy text-white hover:bg-buy/80 transition-colors">
+                    Buy
                   </button>
-                ))}
+                  <button onClick={() => setOrderSide("sell")} className="px-3 py-1 rounded text-xs font-bold bg-sell text-white hover:bg-sell/80 transition-colors">
+                    Sell
+                  </button>
+                </div>
+                <div className="flex gap-1">
+                  {RANGES.map((r) => (
+                    <button
+                      key={r.key}
+                      onClick={() => setRange(r.key)}
+                      className={cn(
+                        "px-2 py-1 rounded text-xs font-medium transition-colors",
+                        range === r.key ? "bg-brand text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      )}
+                    >
+                      {r.key}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -219,6 +231,10 @@ export default function WatchlistPage() {
           </div>
         )}
       </div>
+
+      {orderSide && selectedTicker && (
+        <OrderTicket ticker={selectedTicker} defaultSide={orderSide} onClose={() => setOrderSide(null)} />
+      )}
     </div>
   );
 }
