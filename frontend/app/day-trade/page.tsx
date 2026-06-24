@@ -5,7 +5,10 @@ import { signalApi } from "@/lib/api";
 import { fmtUsd, fmtPct } from "@/lib/utils";
 import CandleChart from "@/components/CandleChart";
 import OrderTicket from "@/components/OrderTicket";
-import { Flame, TrendingUp, TrendingDown, X, Loader2 } from "lucide-react";
+import SortableTh, { SortState, toggleSort, sortRows } from "@/components/SortableTh";
+import { Flame, X, Loader2 } from "lucide-react";
+
+type SortKey = "symbol" | "option_type" | "confidence" | "entry_price" | "target_price" | "stop_price";
 
 const TIER_META: Record<string, { title: string; sub: string; cls: string; dot: string }> = {
   green:        { title: "Top Picks",    sub: "Rank 1–20",  cls: "border-buy/40 bg-buy/5",      dot: "bg-buy" },
@@ -27,6 +30,10 @@ function OptionBadge({ type }: { type: string }) {
 
 function TierPanel({ tier, rows, onSelect, selected }: { tier: string; rows: any[]; onSelect: (t: string) => void; selected: string | null }) {
   const meta = TIER_META[tier];
+  const [sort, setSort] = useState<SortState<SortKey>>(null);
+  const displayed = sortRows(rows, sort, (s: any, key: SortKey) => s[key]);
+  const onSort = (key: SortKey) => setSort((s) => toggleSort(s, key));
+
   return (
     <div className={`card ${meta.cls}`}>
       <div className="flex items-center gap-2 mb-3">
@@ -37,32 +44,37 @@ function TierPanel({ tier, rows, onSelect, selected }: { tier: string; rows: any
       {rows.length === 0 ? (
         <p className="text-xs text-gray-500 py-4 text-center">No signals in this band yet.</p>
       ) : (
-        <div className="space-y-1 max-h-[480px] overflow-y-auto pr-1">
-          {rows.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => onSelect(s.symbol)}
-              className={`w-full flex items-center gap-2 text-xs py-1.5 px-1.5 rounded border-b border-gray-800/50 last:border-0 transition-colors text-left ${
-                selected === s.symbol ? "bg-brand/10" : "hover:bg-gray-800/40"
-              }`}
-            >
-              <span className="font-mono font-bold w-14 shrink-0">{s.symbol}</span>
-              <OptionBadge type={s.option_type} />
-              {s.signal_type === "BUY"
-                ? <TrendingUp size={12} className="text-buy shrink-0" />
-                : <TrendingDown size={12} className="text-sell shrink-0" />}
-              <span className="text-gray-500 w-9 shrink-0">{fmtPct(s.confidence)}</span>
-              <span className="text-gray-400 ml-auto whitespace-nowrap">
-                <span className="text-gray-500">In </span>{s.entry_price ? fmtUsd(s.entry_price) : "—"}
-              </span>
-              <span className="text-buy whitespace-nowrap">
-                <span className="text-gray-500">Out </span>{s.target_price ? fmtUsd(s.target_price) : "—"}
-              </span>
-              <span className="text-sell whitespace-nowrap">
-                <span className="text-gray-500">Stop </span>{s.stop_price ? fmtUsd(s.stop_price) : "—"}
-              </span>
-            </button>
-          ))}
+        <div className="max-h-[480px] overflow-y-auto pr-1">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-gray-500 text-left border-b border-gray-800/50">
+                <SortableTh label="Symbol" sortKey="symbol" sort={sort} onSort={onSort} />
+                <SortableTh label="Call/Put" sortKey="option_type" sort={sort} onSort={onSort} />
+                <SortableTh label="Conf" sortKey="confidence" sort={sort} onSort={onSort} />
+                <SortableTh label="In" sortKey="entry_price" sort={sort} onSort={onSort} />
+                <SortableTh label="Out" sortKey="target_price" sort={sort} onSort={onSort} />
+                <SortableTh label="Stop" sortKey="stop_price" sort={sort} onSort={onSort} />
+              </tr>
+            </thead>
+            <tbody>
+              {displayed.map((s) => (
+                <tr
+                  key={s.id}
+                  onClick={() => onSelect(s.symbol)}
+                  className={`cursor-pointer border-b border-gray-800/50 last:border-0 transition-colors ${
+                    selected === s.symbol ? "bg-brand/10" : "hover:bg-gray-800/40"
+                  }`}
+                >
+                  <td className="py-1.5 font-mono font-bold">{s.symbol}</td>
+                  <td className="py-1.5"><OptionBadge type={s.option_type} /></td>
+                  <td className="py-1.5 text-gray-400">{fmtPct(s.confidence)}</td>
+                  <td className="py-1.5 text-gray-400 whitespace-nowrap">{s.entry_price ? fmtUsd(s.entry_price) : "—"}</td>
+                  <td className="py-1.5 text-buy whitespace-nowrap">{s.target_price ? fmtUsd(s.target_price) : "—"}</td>
+                  <td className="py-1.5 text-sell whitespace-nowrap">{s.stop_price ? fmtUsd(s.stop_price) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
