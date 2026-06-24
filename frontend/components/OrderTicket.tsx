@@ -87,10 +87,17 @@ export default function OrderTicket({
   });
 
   const formValid = qty > 0 && connId && (orderType === "market" || (limitPrice && parseFloat(limitPrice) > 0));
+  const disabledReason = !connId
+    ? "Connect a broker to trade."
+    : qty <= 0
+    ? "Enter a quantity greater than 0."
+    : orderType === "limit" && !(limitPrice && parseFloat(limitPrice) > 0)
+    ? "Enter a limit price to continue."
+    : "";
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="card w-full max-w-md border-brand/30">
+      <div className="card w-full max-w-md border-brand/30" role="dialog" aria-modal="true" aria-label={`${ticker} order ticket`}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-lg font-mono">{ticker}</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-300">
@@ -135,31 +142,32 @@ export default function OrderTicket({
               <div>
                 <label className="label">Order Type</label>
                 <div className="grid grid-cols-2 gap-1.5">
-                  {(["market", "limit"] as const).map((t) => (
+                  {([{ v: "market", label: "Market" }, { v: "limit", label: "Limit" }] as const).map(({ v, label }) => (
                     <button
-                      key={t}
+                      key={v}
                       type="button"
-                      onClick={() => setOrderType(t)}
+                      onClick={() => setOrderType(v)}
                       className={cn(
-                        "py-2 rounded-lg text-sm font-semibold capitalize transition-colors",
-                        orderType === t ? "bg-brand text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                        "py-2 rounded-lg text-sm font-semibold transition-colors",
+                        orderType === v ? "bg-brand text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
                       )}
                     >
-                      {t}
+                      {label}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="label">Quantity</label>
-                <input className="input" type="number" min="0" step="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+                <label htmlFor="order-quantity" className="label">Quantity</label>
+                <input id="order-quantity" className="input" type="number" min="0" step="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
               </div>
             </div>
 
             {orderType === "limit" && (
               <div>
-                <label className="label">Limit Price</label>
+                <label htmlFor="order-limit-price" className="label">Limit Price</label>
                 <input
+                  id="order-limit-price"
                   className="input"
                   type="number"
                   min="0"
@@ -229,6 +237,9 @@ export default function OrderTicket({
             >
               Review Order
             </button>
+            {!formValid && disabledReason && (
+              <p className="text-xs text-hold text-center">{disabledReason}</p>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -276,7 +287,7 @@ export default function OrderTicket({
                 disabled={placeMut.isPending}
                 className={cn("flex-1 py-2.5 rounded-lg font-bold text-sm transition-colors disabled:opacity-50", isBuy ? "bg-buy text-white hover:bg-buy/80" : "bg-sell text-white hover:bg-sell/80")}
               >
-                {placeMut.isPending ? "Placing…" : `Place ${side === "buy" ? "Buy" : "Sell"} Order`}
+                {placeMut.isPending ? "Sending…" : `Send ${side === "buy" ? "Buy" : "Sell"} Order`}
               </button>
             </div>
           </div>
