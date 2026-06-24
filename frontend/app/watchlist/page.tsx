@@ -93,7 +93,7 @@ export default function WatchlistPage() {
           <div className="relative flex-1 max-w-sm">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
-              className="input pl-9 uppercase"
+              className="input !pl-9 uppercase"
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
               placeholder="Search ticker symbol… e.g. AAPL"
