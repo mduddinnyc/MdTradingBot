@@ -7,6 +7,7 @@ import { fmtUsd, fmtPct, cn } from "@/lib/utils";
 import { X, Plus, Search, Link2 } from "lucide-react";
 import CandleChart from "@/components/CandleChart";
 import OrderTicket from "@/components/OrderTicket";
+import OptionsOrderTicket from "@/components/OptionsOrderTicket";
 
 const RANGES = [
   { key: "1H", timeframe: "1Min", limit: 60 },
@@ -24,6 +25,7 @@ export default function WatchlistPage() {
   const [range, setRange] = useState<RangeKey>("1D");
   const [searchValue, setSearchValue] = useState("");
   const [orderSide, setOrderSide] = useState<"buy" | "sell" | null>(null);
+  const [optionsOpen, setOptionsOpen] = useState(false);
 
   const { data: watchlist = [] } = useQuery({ queryKey: ["watchlist"], queryFn: signalApi.watchlist });
   const { data: connections = [] } = useQuery({ queryKey: ["connections"], queryFn: brokerApi.list });
@@ -165,6 +167,9 @@ export default function WatchlistPage() {
                   <button onClick={() => setOrderSide("sell")} className="px-3 py-1 rounded text-xs font-bold bg-sell text-white hover:bg-sell/80 transition-colors">
                     Sell
                   </button>
+                  <button onClick={() => setOptionsOpen(true)} className="px-3 py-1 rounded text-xs font-bold bg-brand text-white hover:bg-brand/80 transition-colors">
+                    Options
+                  </button>
                 </div>
                 <div className="flex gap-1">
                   {RANGES.map((r) => (
@@ -234,6 +239,9 @@ export default function WatchlistPage() {
 
       {orderSide && selectedTicker && (
         <OrderTicket ticker={selectedTicker} defaultSide={orderSide} onClose={() => setOrderSide(null)} />
+      )}
+      {optionsOpen && selectedTicker && (
+        <OptionsOrderTicket ticker={selectedTicker} onClose={() => setOptionsOpen(false)} />
       )}
     </div>
   );

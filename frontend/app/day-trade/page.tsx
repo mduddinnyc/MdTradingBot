@@ -5,6 +5,7 @@ import { signalApi } from "@/lib/api";
 import { fmtUsd, fmtPct } from "@/lib/utils";
 import CandleChart from "@/components/CandleChart";
 import OrderTicket from "@/components/OrderTicket";
+import OptionsOrderTicket from "@/components/OptionsOrderTicket";
 import SortableTh, { SortState, toggleSort, sortRows } from "@/components/SortableTh";
 import { Flame, X, Loader2 } from "lucide-react";
 
@@ -83,9 +84,11 @@ function TierPanel({ tier, rows, onSelect, selected }: { tier: string; rows: any
 
 function DetailPanel({ ticker, onClose }: { ticker: string; onClose: () => void }) {
   const [orderSide, setOrderSide] = useState<"buy" | "sell" | null>(null);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["signal-detail", ticker],
     queryFn: () => signalApi.detail(ticker),
+    refetchInterval: 5_000,
   });
 
   return (
@@ -107,6 +110,19 @@ function DetailPanel({ ticker, onClose }: { ticker: string; onClose: () => void 
 
       {data && (
         <div className="space-y-5">
+          {data.quote?.last != null && (
+            <div className="flex items-center gap-3">
+              <span className="text-2xl font-bold">{fmtUsd(data.quote.last)}</span>
+              {data.quote.change != null && (
+                <span className={`text-sm font-semibold ${data.quote.change >= 0 ? "text-buy" : "text-sell"}`}>
+                  {data.quote.change >= 0 ? "+" : ""}{data.quote.change.toFixed(2)}
+                  {data.quote.change_percentage != null && ` (${fmtPct(data.quote.change_percentage / 100)})`}
+                </span>
+              )}
+              <span className="text-xs text-gray-500">Live</span>
+            </div>
+          )}
+
           {data.bars?.length > 0 ? (
             <CandleChart bars={data.bars} height={300} />
           ) : (
@@ -128,6 +144,12 @@ function DetailPanel({ ticker, onClose }: { ticker: string; onClose: () => void 
                 className="flex-1 py-2 rounded-lg font-bold text-sm bg-sell text-white hover:bg-sell/80 transition-colors"
               >
                 Sell
+              </button>
+              <button
+                onClick={() => setOptionsOpen(true)}
+                className="flex-1 py-2 rounded-lg font-bold text-sm bg-brand text-white hover:bg-brand/80 transition-colors"
+              >
+                Options
               </button>
             </div>
           )}
@@ -241,6 +263,13 @@ function DetailPanel({ ticker, onClose }: { ticker: string; onClose: () => void 
 
       {orderSide && (
         <OrderTicket ticker={ticker} defaultSide={orderSide} onClose={() => setOrderSide(null)} />
+      )}
+      {optionsOpen && (
+        <OptionsOrderTicket
+          ticker={ticker}
+          defaultRight={data.signal?.signal_type === "SELL" ? "put" : "call"}
+          onClose={() => setOptionsOpen(false)}
+        />
       )}
     </div>
   );

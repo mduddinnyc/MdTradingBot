@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -24,10 +24,25 @@ type Form = z.infer<typeof schema>;
 
 function PendingApprovals() {
   const qc = useQueryClient();
+  const [bulkResult, setBulkResult] = useState("");
   const { data: pending = [] } = useQuery({
     queryKey: ["options-automation", "pending"],
     queryFn: signalApi.pendingOptionOrders,
     refetchInterval: 5_000,
+  });
+  const { data: connections = [] } = useQuery({ queryKey: ["connections"], queryFn: brokerApi.list });
+  const connId = connections[0]?.id;
+
+  // Live premium per staged contract, so the user can see if price moved
+  // since staging before approving — same connId for every row since this
+  // app only ever has one active connection per user today.
+  const liveQuotes = useQueries({
+    queries: pending.map((o: any) => ({
+      queryKey: ["quote", connId, o.option_symbol],
+      queryFn: () => brokerApi.quote(connId, o.option_symbol),
+      enabled: !!connId && !!o.option_symbol,
+      refetchInterval: 10_000,
+    })),
   });
 
   const approveMut = useMutation({
@@ -38,17 +53,47 @@ function PendingApprovals() {
     mutationFn: (id: string) => signalApi.rejectOptionOrder(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["options-automation"] }),
   });
+  const approveAllMut = useMutation({
+    mutationFn: () => signalApi.approveAllOptionOrders(),
+    onSuccess: (results: any[]) => {
+      qc.invalidateQueries({ queryKey: ["options-automation"] });
+      const submitted = results.filter((o) => o.status === "submitted" || o.status === "filled").length;
+      const cancelled = results.length - submitted;
+      setBulkResult(
+        cancelled > 0
+          ? `Approved ${submitted}, ${cancelled} couldn't go through (budget or connection) — see status below`
+          : `Approved all ${submitted}`
+      );
+      setTimeout(() => setBulkResult(""), 6000);
+    },
+  });
 
   if (pending.length === 0) return null;
+  const busy = approveMut.isPending || rejectMut.isPending || approveAllMut.isPending;
 
   return (
     <div className="card border-brand/30 bg-brand/5 space-y-3">
-      <h2 className="font-semibold flex items-center gap-2">
-        <Flame size={16} className="text-hold" /> Pending Approval
-        <span className="text-xs text-gray-400 font-normal ml-1">— staged, not yet placed with the broker</span>
-      </h2>
-      {pending.map((o: any) => {
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Flame size={16} className="text-hold" /> Pending Approval
+          <span className="text-xs text-gray-400 font-normal ml-1">— staged, not yet placed with the broker</span>
+        </h2>
+        {pending.length > 1 && (
+          <button
+            onClick={() => approveAllMut.mutate()}
+            disabled={busy}
+            className="flex items-center gap-1 px-3 py-1 rounded bg-buy text-white text-xs font-semibold hover:bg-buy/80 disabled:opacity-50"
+          >
+            <Check size={12} /> Approve All ({pending.length})
+          </button>
+        )}
+      </div>
+      {bulkResult && <p className="text-xs text-gray-300">{bulkResult}</p>}
+      {pending.map((o: any, i: number) => {
         const cost = (o.premium_paid || 0) * o.quantity * 100;
+        const live = liveQuotes[i]?.data as any;
+        const livePremium = live?.last ?? live?.ask_price ?? null;
+        const moved = livePremium != null && o.premium_paid ? livePremium - o.premium_paid : null;
         return (
           <div key={o.id} className="flex items-center gap-3 text-sm py-2 border-b border-gray-800/50 last:border-0">
             <span className="font-mono font-bold w-14">{o.ticker}</span>
@@ -57,7 +102,13 @@ function PendingApprovals() {
             </span>
             <span className="text-gray-400">Strike ${o.strike_price?.toFixed(2)}</span>
             <span className="text-gray-500 text-xs">{o.expiration_date}</span>
-            <span className="text-gray-400">Premium {fmtUsd(o.premium_paid)}</span>
+            <span className="text-gray-400">Staged {fmtUsd(o.premium_paid)}</span>
+            {livePremium != null && (
+              <span className={moved != null && Math.abs(moved) >= 0.01 ? (moved > 0 ? "text-sell" : "text-buy") : "text-gray-400"}>
+                Now {fmtUsd(livePremium)}
+                {moved != null && Math.abs(moved) >= 0.01 && ` (${moved > 0 ? "+" : ""}${moved.toFixed(2)})`}
+              </span>
+            )}
             <span className="text-hold font-semibold">Cost {fmtUsd(cost)}</span>
             <div className="ml-auto flex gap-2">
               <button

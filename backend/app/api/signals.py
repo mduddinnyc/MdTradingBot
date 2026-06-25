@@ -18,7 +18,9 @@ from app.schemas.auth import MessageResponse
 from app.schemas.signal import (
     AutomationConfigRequest,
     AutomationConfigResponse,
+    ManualOptionOrderRequest,
     ManualOrderRequest,
+    RiskProfileWizardRequest,
     OptionsAutomationConfigRequest,
     OptionsAutomationConfigResponse,
     OrderResponse,
@@ -296,6 +298,7 @@ async def get_signal_detail(ticker: str, current_user: CurrentUser, db: DB):
     bars: list[dict] = []
     options_chain = None
     regime = "sideways"
+    quote = None
 
     if conn:
         adapter = get_adapter(conn.broker_name)
@@ -303,6 +306,12 @@ async def get_signal_detail(ticker: str, current_user: CurrentUser, db: DB):
             bars = adapter.get_bars(conn, ticker, "1Day", 100)
         except Exception:
             bars = []
+
+        if hasattr(adapter, "get_latest_quote"):
+            try:
+                quote = adapter.get_latest_quote(conn, ticker)
+            except Exception:
+                quote = None
 
         if len(bars) >= 30:
             try:
@@ -338,6 +347,7 @@ async def get_signal_detail(ticker: str, current_user: CurrentUser, db: DB):
         "signal": latest_signal,
         "bars": bars,
         "regime": regime,
+        "quote": quote,
         "options_chain": options_chain,
         "strategy_recommendation": strategy_recommendation,
         "has_broker_connection": conn is not None,
@@ -373,6 +383,104 @@ async def refresh_signal(ticker: str, current_user: CurrentUser, db: DB):
 
 
 # ── Automation config ──────────────────────────────────────────
+
+# Risk Profile Wizard presets — docs/AUTOPILOT_MODE_DESIGN.md §2.2.
+# max_daily_loss_usd is mandatory here (computed below, % of live equity)
+# even though it stays nullable on the column for the manual form.
+RISK_PROFILE_PRESETS = {
+    "conservative": {
+        "min_confidence": 0.75, "max_position_pct": 0.05,
+        "stop_loss_pct": 0.015, "take_profit_pct": 0.03,
+        "max_open_positions": 3, "cooldown_minutes": 90, "daily_loss_pct": 0.02,
+    },
+    "balanced": {
+        "min_confidence": 0.60, "max_position_pct": 0.10,
+        "stop_loss_pct": 0.02, "take_profit_pct": 0.04,
+        "max_open_positions": 5, "cooldown_minutes": 60, "daily_loss_pct": 0.03,
+    },
+    "aggressive": {
+        "min_confidence": 0.55, "max_position_pct": 0.15,
+        "stop_loss_pct": 0.03, "take_profit_pct": 0.06,
+        "max_open_positions": 8, "cooldown_minutes": 30, "daily_loss_pct": 0.05,
+    },
+}
+
+
+@router.post("/automation/wizard", response_model=AutomationConfigResponse, status_code=201)
+async def apply_risk_profile_wizard(body: RiskProfileWizardRequest, request: Request, current_user: CurrentUser, db: DB):
+    """
+    The 3-tap path: risk appetite -> capital -> universe. Always sets
+    max_daily_loss_usd (the doc's Critical gap — today's manual form
+    leaves it optional). Re-running this replaces the user's existing
+    config for this connection rather than creating a second one.
+    """
+    result = await db.execute(
+        select(BrokerConnection).where(
+            BrokerConnection.id == body.broker_connection_id,
+            BrokerConnection.user_id == current_user.id,
+            BrokerConnection.is_active == True,
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=404, detail="Broker connection not found")
+
+    adapter = get_adapter(conn.broker_name)
+    account = adapter.get_account(conn)
+    equity = float(account["equity"])
+    if equity <= 0:
+        raise HTTPException(status_code=400, detail="Account equity must be positive to size an automation profile")
+
+    preset = RISK_PROFILE_PRESETS[body.risk_profile]
+    capital_usd = body.capital_value if body.capital_mode == "dollar" else equity * body.capital_value / 100
+    capital_usd = min(capital_usd, equity)
+
+    if body.universe == "day_trade_scan":
+        result = await db.execute(
+            select(Watchlist).where(Watchlist.user_id == current_user.id, Watchlist.is_default == True)
+        )
+        wl = result.scalar_one_or_none()
+        if not wl:
+            wl = Watchlist(user_id=current_user.id, name="Default", is_default=True)
+            db.add(wl)
+            await db.flush()
+        result = await db.execute(select(WatchlistItem.symbol_id).where(WatchlistItem.watchlist_id == wl.id))
+        existing_symbol_ids = {row[0] for row in result.all()}
+        for ticker in DAY_TRADE_UNIVERSE:
+            symbol = await md_svc.get_or_create_symbol(db, ticker)
+            if symbol.id not in existing_symbol_ids:
+                db.add(WatchlistItem(watchlist_id=wl.id, symbol_id=symbol.id))
+                existing_symbol_ids.add(symbol.id)
+
+    result = await db.execute(
+        select(AutomationConfig).where(
+            AutomationConfig.user_id == current_user.id,
+            AutomationConfig.broker_connection_id == conn.id,
+        )
+    )
+    config = result.scalar_one_or_none()
+    if not config:
+        config = AutomationConfig(user_id=current_user.id, broker_connection_id=conn.id)
+        db.add(config)
+
+    config.is_enabled = body.is_enabled
+    config.min_confidence = preset["min_confidence"]
+    config.max_position_pct = preset["max_position_pct"]
+    config.max_position_size_usd = round(capital_usd / preset["max_open_positions"], 2)
+    config.stop_loss_pct = preset["stop_loss_pct"]
+    config.take_profit_pct = preset["take_profit_pct"]
+    config.max_open_positions = preset["max_open_positions"]
+    config.cooldown_minutes = preset["cooldown_minutes"]
+    config.max_daily_loss_usd = round(equity * preset["daily_loss_pct"], 2)
+    await db.flush()
+
+    await audit_log(
+        db, action="AUTOMATION_WIZARD_APPLIED", outcome="success",
+        user_id=current_user.id, resource_type="automation_config", resource_id=config.id, request=request,
+        metadata={"risk_profile": body.risk_profile, "universe": body.universe, "capital_usd": capital_usd, "equity": equity},
+    )
+    return config
+
 
 @router.get("/automation", response_model=list[AutomationConfigResponse])
 async def get_automation_configs(current_user: CurrentUser, db: DB):
@@ -522,6 +630,90 @@ async def update_options_automation_config(
     return config
 
 
+@router.post("/options-automation/manual", response_model=PendingOptionOrderResponse, status_code=201)
+async def stage_manual_option_order(body: ManualOptionOrderRequest, request: Request, current_user: CurrentUser, db: DB):
+    """
+    User picked a real contract off the chain themselves (order ticket) —
+    stages it exactly like an automation-found candidate, same
+    pending_approval gate, same /approve and /reject endpoints. Premium is
+    always read fresh from a live quote here, never trusted from the
+    client, same as every other price in this app.
+    """
+    result = await db.execute(
+        select(BrokerConnection).where(
+            BrokerConnection.id == body.broker_connection_id,
+            BrokerConnection.user_id == current_user.id,
+            BrokerConnection.is_active == True,
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=404, detail="Broker connection not found")
+
+    adapter = get_adapter(conn.broker_name)
+    if not hasattr(adapter, "get_latest_quote"):
+        raise HTTPException(status_code=501, detail=f"{conn.broker_name} does not support options trading yet")
+
+    try:
+        quote = adapter.get_latest_quote(conn, body.option_symbol)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not get a live price for {body.option_symbol}: {exc}")
+
+    premium = quote.get("ask_price") if body.side == "buy" else quote.get("bid_price")
+    if not premium:
+        raise HTTPException(status_code=400, detail=f"No live {'ask' if body.side == 'buy' else 'bid'} price available for {body.option_symbol}")
+
+    if body.side == "sell":
+        try:
+            positions = adapter.get_positions(conn)
+            held = next((float(p["qty"]) for p in positions if p.get("symbol") == body.option_symbol), 0.0)
+        except Exception:
+            held = None
+        if held is not None and body.quantity > held:
+            raise HTTPException(
+                status_code=400,
+                detail=f"You hold {held:g} contracts of {body.option_symbol} — cannot sell {body.quantity}",
+            )
+    else:
+        spent = await opt_exec.get_spent_budget(db, current_user.id)
+        result = await db.execute(
+            select(OptionsAutomationConfig).where(OptionsAutomationConfig.user_id == current_user.id)
+        )
+        config = result.scalar_one_or_none()
+        budget = config.budget_usd if config else 10_000.0
+        cost = premium * body.quantity * 100
+        if spent + cost > budget:
+            raise HTTPException(
+                status_code=400,
+                detail=f"This would cost ~${cost:,.2f}; only ${budget - spent:,.2f} of your options budget remains",
+            )
+
+    order = Order(
+        user_id=current_user.id,
+        broker_connection_id=conn.id,
+        ticker=body.ticker,
+        side=body.side,
+        quantity=body.quantity,
+        status="pending_approval",
+        is_automated=False,
+        asset_type="option",
+        option_symbol=body.option_symbol,
+        strike_price=body.strike_price,
+        expiration_date=body.expiration_date,
+        option_right=body.option_right,
+        premium_paid=float(premium),
+    )
+    db.add(order)
+    await db.flush()
+
+    await audit_log(
+        db, action="OPTIONS_MANUAL_ORDER_STAGED", outcome="success",
+        user_id=current_user.id, resource_type="order", resource_id=order.id, request=request,
+        metadata={"ticker": order.ticker, "option_symbol": order.option_symbol, "side": order.side},
+    )
+    return order
+
+
 @router.get("/options-automation/pending", response_model=list[PendingOptionOrderResponse])
 async def get_pending_option_orders(current_user: CurrentUser, db: DB):
     result = await db.execute(
@@ -532,6 +724,57 @@ async def get_pending_option_orders(current_user: CurrentUser, db: DB):
         ).order_by(Order.created_at.desc())
     )
     return result.scalars().all()
+
+
+@router.post("/options-automation/approve-all", response_model=list[PendingOptionOrderResponse])
+async def approve_all_pending_option_orders(request: Request, current_user: CurrentUser, db: DB):
+    """
+    Approves every pending_approval option order for the user, oldest first.
+    Each one still goes through approve_staged_order's own budget re-check —
+    approving five at once doesn't skip the cap, it just means the 3rd or
+    4th in line may get correctly cancelled once the earlier approvals in
+    this same batch have used up the budget. One order's failure doesn't
+    stop the rest from being attempted.
+    """
+    result = await db.execute(
+        select(Order).where(
+            Order.user_id == current_user.id,
+            Order.asset_type == "option",
+            Order.status == "pending_approval",
+        ).order_by(Order.created_at.asc())
+    )
+    orders = result.scalars().all()
+
+    touched = []
+    for order in orders:
+        result = await db.execute(
+            select(BrokerConnection).where(BrokerConnection.id == order.broker_connection_id)
+        )
+        conn = result.scalar_one_or_none()
+        if not conn or not conn.is_active:
+            order.status = "cancelled"
+            order.rejection_reason = "Broker connection is no longer active"
+            await db.flush()
+            touched.append(order)
+            continue
+        try:
+            order = await opt_exec.approve_staged_order(db, conn, order)
+        except Exception as exc:
+            order.status = "cancelled"
+            order.rejection_reason = str(exc)
+            await db.flush()
+        touched.append(order)
+
+    await audit_log(
+        db, action="OPTIONS_ORDER_APPROVE_ALL", outcome="success",
+        user_id=current_user.id, resource_type="order", request=request,
+        metadata={
+            "attempted": len(touched),
+            "submitted": sum(1 for o in touched if o.status in ("submitted", "filled")),
+            "cancelled": sum(1 for o in touched if o.status == "cancelled"),
+        },
+    )
+    return touched
 
 
 @router.post("/options-automation/{order_id}/approve", response_model=PendingOptionOrderResponse)

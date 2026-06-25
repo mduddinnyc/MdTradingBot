@@ -529,31 +529,48 @@ def get_latest_quote(conn: BrokerConnection, symbol: str) -> dict:
     }
 
 
-def get_options_chain(conn: BrokerConnection, symbol: str, target_dte: int | None = None) -> dict:
-    """
-    Returns one expiration's chain, with greeks. Default (target_dte=None)
-    picks the nearest upcoming expiration — that's often only 0-2 days out,
-    fine for a quick look at the Options page. Pass target_dte to pick the
-    expiration closest to today+target_dte instead — needed for anything
-    that actually wants to hold the contract a while (e.g. the options
-    automation staging logic, which targets 7-21 DTE, not tomorrow).
-    """
+def list_option_expirations(conn: BrokerConnection, symbol: str) -> list[str]:
+    """All available expiration dates for a symbol, soonest first — for a
+    real order ticket's date-tab row, not just the one nearest/target_dte
+    chain endpoints already pick for advisory/automation use."""
     api_key, _ = _creds(conn)
     base = _base(conn.is_paper)
-
     exp_data = _get(base, "/markets/options/expirations", api_key, params={"symbol": symbol})
     expirations = _as_list((exp_data.get("expirations") or {}).get("date"))
     if not expirations:
         raise HTTPException(status_code=404, detail=f"No options expirations found for {symbol}")
+    return sorted(expirations)
 
-    if target_dte is None:
-        chosen = sorted(expirations)[0]
+
+def get_options_chain(
+    conn: BrokerConnection,
+    symbol: str,
+    target_dte: int | None = None,
+    expiration: str | None = None,
+) -> dict:
+    """
+    Returns one expiration's chain, with greeks. Resolution order:
+    explicit `expiration` (exact date the caller already chose, e.g. from
+    list_option_expirations — used by the order ticket) > `target_dte`
+    (closest to today+N, used by automation staging which targets 7-21
+    DTE) > nearest upcoming expiration (default, fine for a quick look on
+    the Options page).
+    """
+    api_key, _ = _creds(conn)
+    base = _base(conn.is_paper)
+
+    if expiration:
+        chosen = expiration
     else:
-        today = dt.date.today()
-        chosen = min(
-            expirations,
-            key=lambda d: abs((dt.date.fromisoformat(d) - today).days - target_dte),
-        )
+        expirations = list_option_expirations(conn, symbol)
+        if target_dte is None:
+            chosen = expirations[0]
+        else:
+            today = dt.date.today()
+            chosen = min(
+                expirations,
+                key=lambda d: abs((dt.date.fromisoformat(d) - today).days - target_dte),
+            )
 
     chain_data = _get(base, "/markets/options/chains", api_key, params={
         "symbol": symbol, "expiration": chosen, "greeks": "true",

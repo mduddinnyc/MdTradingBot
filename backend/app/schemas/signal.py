@@ -36,6 +36,52 @@ class WatchlistAddRequest(BaseModel):
         self.ticker = self.ticker.upper().strip()
 
 
+class RiskProfileWizardRequest(BaseModel):
+    """
+    The 3-tap wizard from docs/AUTOPILOT_MODE_DESIGN.md §2.1. Resolves to
+    the same AutomationConfig fields the manual form sets — no schema
+    redesign, just a guided path that always sets max_daily_loss_usd
+    (mandatory here; optional/nullable on the manual form).
+    """
+    broker_connection_id: uuid.UUID
+    risk_profile: str
+    capital_mode: str
+    capital_value: float
+    universe: str
+    is_enabled: bool = True
+
+    @field_validator("risk_profile")
+    @classmethod
+    def valid_profile(cls, v: str) -> str:
+        v = v.lower().strip()
+        if v not in ("conservative", "balanced", "aggressive"):
+            raise ValueError("risk_profile must be 'conservative', 'balanced', or 'aggressive'")
+        return v
+
+    @field_validator("capital_mode")
+    @classmethod
+    def valid_capital_mode(cls, v: str) -> str:
+        v = v.lower().strip()
+        if v not in ("dollar", "percent"):
+            raise ValueError("capital_mode must be 'dollar' or 'percent'")
+        return v
+
+    @field_validator("universe")
+    @classmethod
+    def valid_universe(cls, v: str) -> str:
+        v = v.lower().strip()
+        if v not in ("watchlist", "day_trade_scan"):
+            raise ValueError("universe must be 'watchlist' or 'day_trade_scan'")
+        return v
+
+    @field_validator("capital_value")
+    @classmethod
+    def positive_capital(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("capital_value must be positive")
+        return v
+
+
 class AutomationConfigRequest(BaseModel):
     broker_connection_id: uuid.UUID
     is_enabled: bool = False
@@ -178,3 +224,48 @@ class PendingOptionOrderResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ManualOptionOrderRequest(BaseModel):
+    """
+    A user-picked contract from the real chain — option_symbol must be the
+    exact OCC symbol the chain endpoint returned, never hand-typed. Side
+    'buy' opens a new long call/put; 'sell' closes one already held (no
+    naked writing — this platform never has, by design).
+    """
+    broker_connection_id: uuid.UUID
+    ticker: str
+    option_symbol: str
+    option_right: str
+    strike_price: float
+    expiration_date: date
+    side: str
+    quantity: int = 1
+
+    @field_validator("ticker", "option_symbol")
+    @classmethod
+    def upper(cls, v: str) -> str:
+        return v.upper().strip()
+
+    @field_validator("option_right")
+    @classmethod
+    def valid_right(cls, v: str) -> str:
+        v = v.lower().strip()
+        if v not in ("call", "put"):
+            raise ValueError("option_right must be 'call' or 'put'")
+        return v
+
+    @field_validator("side")
+    @classmethod
+    def valid_side(cls, v: str) -> str:
+        v = v.lower().strip()
+        if v not in ("buy", "sell"):
+            raise ValueError("side must be 'buy' or 'sell'")
+        return v
+
+    @field_validator("quantity")
+    @classmethod
+    def positive_quantity(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("quantity must be positive")
+        return v

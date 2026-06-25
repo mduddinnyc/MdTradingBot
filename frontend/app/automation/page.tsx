@@ -8,6 +8,7 @@ import { useState, useEffect } from "react";
 import { Shield, AlertTriangle, OctagonX } from "lucide-react";
 import { fmtPct } from "@/lib/utils";
 import OptionsAutomationPanel from "@/components/OptionsAutomationPanel";
+import RiskProfileWizard from "@/components/RiskProfileWizard";
 
 const schema = z.object({
   broker_connection_id: z.string().uuid(),
@@ -28,12 +29,21 @@ export default function AutomationPage() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [stopResult, setStopResult] = useState<{ configs_disabled: number; orders_cancelled: number } | null>(null);
+  const [mode, setMode] = useState<"wizard" | "custom" | null>(null);
+  const [wizardDone, setWizardDone] = useState(false);
 
   const { data: connections = [] } = useQuery({ queryKey: ["connections"], queryFn: brokerApi.list });
   const { data: configs = [] } = useQuery({ queryKey: ["automation"], queryFn: signalApi.automationList });
   const { data: pdtStatuses = [] } = useQuery({ queryKey: ["pdt-status"], queryFn: signalApi.pdtStatus, refetchInterval: 60_000 });
 
   const existing = configs[0];
+  const connId: string | undefined = existing?.broker_connection_id || connections[0]?.id;
+  const equity = pdtStatuses.find((s: any) => s.connection_id === connId)?.equity;
+
+  useEffect(() => {
+    if (mode === null && connections.length) setMode(existing ? "custom" : "wizard");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existing?.id, connections.length]);
 
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<Form>({
     resolver: zodResolver(schema),
@@ -173,7 +183,34 @@ export default function AutomationPage() {
         </div>
       </div>
 
+      {wizardDone && (
+        <div className="card border-buy/40 bg-buy/5 flex items-start gap-3">
+          <Shield size={18} className="text-buy mt-0.5 shrink-0" />
+          <p className="text-sm"><strong className="text-buy">Autopilot is live.</strong> <span className="text-gray-400">Guardrails below reflect your risk profile — adjust anytime.</span></p>
+        </div>
+      )}
+
+      {mode === "wizard" && connId && (
+        equity != null ? (
+          <RiskProfileWizard
+            connId={connId}
+            equity={equity}
+            onDone={() => { setMode("custom"); setWizardDone(true); setTimeout(() => setWizardDone(false), 6000); }}
+            onUseCustom={() => setMode("custom")}
+          />
+        ) : (
+          <div className="card text-center py-12 text-gray-400">Loading account info…</div>
+        )
+      )}
+
+      {mode === "custom" && (
       <form onSubmit={handleSubmit((d) => mut.mutate(d))} className="space-y-6" noValidate>
+
+        <div className="flex justify-end">
+          <button type="button" onClick={() => setMode("wizard")} className="text-xs text-gray-400 hover:text-gray-200 underline">
+            Use guided setup instead
+          </button>
+        </div>
 
         {/* Enable toggle */}
         <div className="card flex items-center justify-between">
@@ -289,6 +326,7 @@ export default function AutomationPage() {
           {isSubmitting ? "Saving…" : existing ? "Update config" : "Save config"}
         </button>
       </form>
+      )}
 
       <OptionsAutomationPanel />
     </div>

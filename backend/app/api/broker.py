@@ -190,6 +190,7 @@ async def get_options_chain(
     symbol: str,
     current_user: CurrentUser,
     db: DB,
+    expiration: str | None = None,
 ):
     result = await db.execute(
         select(BrokerConnection).where(BrokerConnection.id == connection_id)
@@ -198,4 +199,21 @@ async def get_options_chain(
     adapter = get_adapter(conn.broker_name)
     if not hasattr(adapter, "get_options_chain"):
         raise HTTPException(status_code=501, detail=f"{conn.broker_name} does not support options chain")
-    return adapter.get_options_chain(conn, symbol.upper())
+    return adapter.get_options_chain(conn, symbol.upper(), expiration=expiration)
+
+
+@router.get("/connections/{connection_id}/options/{symbol}/expirations")
+async def get_option_expirations(
+    connection_id: uuid.UUID,
+    symbol: str,
+    current_user: CurrentUser,
+    db: DB,
+):
+    result = await db.execute(
+        select(BrokerConnection).where(BrokerConnection.id == connection_id)
+    )
+    conn = _owned_or_404(result.scalar_one_or_none(), current_user.id)
+    adapter = get_adapter(conn.broker_name)
+    if not hasattr(adapter, "list_option_expirations"):
+        raise HTTPException(status_code=501, detail=f"{conn.broker_name} does not support options chain")
+    return adapter.list_option_expirations(conn, symbol.upper())

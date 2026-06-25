@@ -171,28 +171,35 @@ async def stage_option_trade(
 
 
 async def approve_staged_order(db: AsyncSession, conn: BrokerConnection, order: Order) -> Order:
-    """Re-checks the budget (prices move between staging and approval),
-    then places the real paper order with the broker."""
+    """
+    Places the real paper order with the broker. Buy (opening) orders get
+    a fresh budget re-check (prices move between staging and approval);
+    sell (closing) orders skip it — closing a position frees budget, it
+    doesn't consume more.
+    """
     if order.status != "pending_approval":
         raise ValueError(f"Order {order.id} is not pending approval (status={order.status})")
 
-    spent = await get_spent_budget(db, order.user_id)
-    cost = (order.premium_paid or 0) * order.quantity * 100
-    result = await db.execute(
-        select(OptionsAutomationConfig).where(OptionsAutomationConfig.user_id == order.user_id)
-    )
-    config = result.scalar_one_or_none()
-    budget = config.budget_usd if config else 10_000.0
-    if spent + cost > budget:
-        order.status = "cancelled"
-        order.rejection_reason = "Budget cap exceeded between staging and approval"
-        await db.flush()
-        return order
+    is_buy = order.side == "buy"
+
+    if is_buy:
+        spent = await get_spent_budget(db, order.user_id)
+        cost = (order.premium_paid or 0) * order.quantity * 100
+        result = await db.execute(
+            select(OptionsAutomationConfig).where(OptionsAutomationConfig.user_id == order.user_id)
+        )
+        config = result.scalar_one_or_none()
+        budget = config.budget_usd if config else 10_000.0
+        if spent + cost > budget:
+            order.status = "cancelled"
+            order.rejection_reason = "Budget cap exceeded between staging and approval"
+            await db.flush()
+            return order
 
     adapter = get_adapter(conn.broker_name)
-    side = "buy_to_open"
+    broker_side = "buy_to_open" if is_buy else "sell_to_close"
     res = adapter.place_option_order(
-        conn, order.ticker, order.option_symbol, side, int(order.quantity), order_type="market",
+        conn, order.ticker, order.option_symbol, broker_side, int(order.quantity), order_type="market",
     )
     order.broker_order_id = res.get("id")
     order.status = "submitted"
@@ -210,6 +217,22 @@ async def approve_staged_order(db: AsyncSession, conn: BrokerConnection, order: 
                 order.avg_fill_price = float(o["filled_avg_price"]) if o.get("filled_avg_price") else None
                 order.filled_at = dt.datetime.now(dt.timezone.utc)
                 break
+
+    if not is_buy and order.status in ("submitted", "filled"):
+        # Link to the oldest still-open buy for this exact contract so
+        # get_spent_budget stops counting it once this close goes through.
+        result = await db.execute(
+            select(Order).where(
+                Order.user_id == order.user_id,
+                Order.option_symbol == order.option_symbol,
+                Order.side == "buy",
+                Order.status.in_(["filled", "submitted"]),
+                Order.closing_order_id.is_(None),
+            ).order_by(Order.created_at.asc()).limit(1)
+        )
+        opening = result.scalar_one_or_none()
+        if opening:
+            opening.closing_order_id = order.id
 
     await db.flush()
     return order

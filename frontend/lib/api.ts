@@ -121,8 +121,11 @@ export const brokerApi = {
   quote: (id: string, symbol: string) =>
     api.get(`/broker/connections/${id}/quote/${symbol}`).then((r) => r.data),
 
-  options: (id: string, symbol: string) =>
-    api.get(`/broker/connections/${id}/options/${symbol}`).then((r) => r.data),
+  options: (id: string, symbol: string, expiration?: string) =>
+    api.get(`/broker/connections/${id}/options/${symbol}`, { params: expiration ? { expiration } : {} }).then((r) => r.data),
+
+  optionExpirations: (id: string, symbol: string) =>
+    api.get(`/broker/connections/${id}/options/${symbol}/expirations`).then((r) => r.data),
 };
 
 // ── Signals ────────────────────────────────────────────────────
@@ -148,6 +151,15 @@ export const signalApi = {
 
   automationUpdate: (id: string, body: object) =>
     api.patch(`/signals/automation/${id}`, body).then((r) => r.data),
+
+  automationWizard: (body: {
+    broker_connection_id: string;
+    risk_profile: "conservative" | "balanced" | "aggressive";
+    capital_mode: "dollar" | "percent";
+    capital_value: number;
+    universe: "watchlist" | "day_trade_scan";
+    is_enabled: boolean;
+  }) => api.post("/signals/automation/wizard", body).then((r) => r.data),
 
   orders: (limit = 100, period: "today" | "7d" | "30d" | "1y" | "all" = "all") =>
     api.get("/signals/orders", { params: { limit, period } }).then((r) => r.data),
@@ -181,6 +193,20 @@ export const signalApi = {
 
   rejectOptionOrder: (orderId: string) =>
     api.post(`/signals/options-automation/${orderId}/reject`).then((r) => r.data),
+
+  approveAllOptionOrders: () =>
+    api.post("/signals/options-automation/approve-all").then((r) => r.data),
+
+  stageManualOption: (body: {
+    broker_connection_id: string;
+    ticker: string;
+    option_symbol: string;
+    option_right: "call" | "put";
+    strike_price: number;
+    expiration_date: string;
+    side: "buy" | "sell";
+    quantity: number;
+  }) => api.post("/signals/options-automation/manual", body).then((r) => r.data),
 };
 
 // ── Analysis ───────────────────────────────────────────────────
