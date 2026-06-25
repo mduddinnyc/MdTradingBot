@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { brokerApi, signalApi } from "@/lib/api";
 import { fmtUsd, cn } from "@/lib/utils";
@@ -31,6 +31,14 @@ export default function OptionsOrderTicket({
   const { data: connections = [] } = useQuery({ queryKey: ["connections"], queryFn: brokerApi.list });
   const connId = connections[0]?.id;
 
+  const { data: quote } = useQuery({
+    queryKey: ["quote", connId, ticker],
+    queryFn: () => brokerApi.quote(connId, ticker),
+    enabled: !!connId,
+    refetchInterval: 10_000,
+  });
+  const currentPrice: number | null = quote?.last ?? null;
+
   const { data: expirations = [] } = useQuery({
     queryKey: ["option-expirations", connId, ticker],
     queryFn: () => brokerApi.optionExpirations(connId, ticker),
@@ -50,10 +58,20 @@ export default function OptionsOrderTicket({
 
   const contracts = (chain?.options || []).filter((o: any) => o.option_type === right);
   const selected = contracts.find((o: any) => o.symbol === selectedSymbol);
+  const sortedContracts = contracts.slice().sort((a: any, b: any) => a.strike - b.strike);
+  const priceMarkerIndex =
+    currentPrice != null && sortedContracts.length
+      ? sortedContracts.findIndex((c: any) => c.strike >= currentPrice)
+      : -1;
 
   const qty = parseInt(quantity) || 0;
   const refPrice = selected ? (side === "buy" ? selected.ask : selected.bid) : null;
   const estCost = refPrice && qty ? refPrice * qty * 100 : null;
+
+  const priceMarkerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    priceMarkerRef.current?.scrollIntoView({ block: "center" });
+  }, [expiration, right, chain]);
 
   const stageMut = useMutation({
     mutationFn: () =>
@@ -88,6 +106,21 @@ export default function OptionsOrderTicket({
             <X size={18} />
           </button>
         </div>
+
+        {currentPrice != null && (
+          <div className="flex items-center justify-between text-sm mb-4 -mt-1">
+            <span className="text-gray-400">Current Price</span>
+            <span className="font-bold text-base">
+              {fmtUsd(currentPrice)}
+              {quote?.change != null && (
+                <span className={cn("ml-2 text-xs font-semibold", quote.change >= 0 ? "text-buy" : "text-sell")}>
+                  {quote.change >= 0 ? "+" : ""}{quote.change.toFixed(2)}
+                  {quote.change_percentage != null && ` (${quote.change_percentage.toFixed(2)}%)`}
+                </span>
+              )}
+            </span>
+          </div>
+        )}
 
         {placed ? (
           <div className="py-10 text-center">
@@ -157,27 +190,42 @@ export default function OptionsOrderTicket({
               <div className="max-h-64 overflow-y-auto border border-gray-800 rounded-lg divide-y divide-gray-800/50">
                 {chainLoading ? (
                   <p className="text-xs text-gray-500 py-4 text-center">Loading live chain…</p>
-                ) : contracts.length === 0 ? (
+                ) : sortedContracts.length === 0 ? (
                   <p className="text-xs text-gray-500 py-4 text-center">No {right}s found for this expiration.</p>
                 ) : (
-                  contracts
-                    .slice()
-                    .sort((a: any, b: any) => a.strike - b.strike)
-                    .map((c: any) => (
-                      <button
-                        key={c.symbol}
-                        onClick={() => setSelectedSymbol(c.symbol)}
-                        className={cn(
-                          "w-full flex items-center justify-between px-3 py-2 text-sm text-left transition-colors",
-                          selectedSymbol === c.symbol ? "bg-brand/10" : "hover:bg-gray-800/40"
+                  <>
+                    {priceMarkerIndex === 0 && currentPrice != null && (
+                      <div ref={priceMarkerRef} className="bg-buy/10 text-buy text-xs font-bold text-center py-1.5">
+                        {ticker} price: {fmtUsd(currentPrice)}
+                      </div>
+                    )}
+                    {sortedContracts.map((c: any, i: number) => (
+                      <div key={c.symbol}>
+                        <button
+                          onClick={() => setSelectedSymbol(c.symbol)}
+                          className={cn(
+                            "w-full flex items-center justify-between px-3 py-2 text-sm text-left transition-colors",
+                            selectedSymbol === c.symbol ? "bg-brand/10" : "hover:bg-gray-800/40"
+                          )}
+                        >
+                          <span className="font-mono font-bold">${c.strike?.toFixed(2)}</span>
+                          <span className="text-gray-400 text-xs">
+                            Bid {c.bid != null ? fmtUsd(c.bid) : "—"} · Ask {c.ask != null ? fmtUsd(c.ask) : "—"}
+                          </span>
+                        </button>
+                        {priceMarkerIndex === i + 1 && currentPrice != null && (
+                          <div ref={priceMarkerRef} className="bg-buy/10 text-buy text-xs font-bold text-center py-1.5">
+                            {ticker} price: {fmtUsd(currentPrice)}
+                          </div>
                         )}
-                      >
-                        <span className="font-mono font-bold">${c.strike?.toFixed(2)}</span>
-                        <span className="text-gray-400 text-xs">
-                          Bid {c.bid != null ? fmtUsd(c.bid) : "—"} · Ask {c.ask != null ? fmtUsd(c.ask) : "—"}
-                        </span>
-                      </button>
-                    ))
+                      </div>
+                    ))}
+                    {priceMarkerIndex === -1 && currentPrice != null && (
+                      <div ref={priceMarkerRef} className="bg-buy/10 text-buy text-xs font-bold text-center py-1.5">
+                        {ticker} price: {fmtUsd(currentPrice)}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>

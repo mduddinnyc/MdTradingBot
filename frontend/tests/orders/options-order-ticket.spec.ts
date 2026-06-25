@@ -120,7 +120,7 @@ test.describe("Options order ticket", () => {
     await mockTradingData(page, { stageResponse: "success" });
     const dialog = await openOptionsTicket(page);
 
-    await dialog.getByText("$200.00").click();
+    await dialog.getByRole("button", { name: /\$200\.00/ }).click();
 
     const postPromise = page.waitForRequest(
       (req) => req.url().includes("/signals/options-automation/manual") && req.method() === "POST"
@@ -144,8 +144,16 @@ test.describe("Options order ticket", () => {
     const dialog = await openOptionsTicket(page);
 
     await dialog.getByRole("button", { name: "Put", exact: true }).click();
-    await expect(dialog.getByText("$200.00")).toBeVisible();
-    await expect(dialog.getByText("$210.00")).not.toBeVisible();
+    await expect(dialog.getByRole("button", { name: /\$200\.00/ })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: /\$210\.00/ })).toHaveCount(0);
+  });
+
+  test("positive: current price shown at the top and inline in the strike list", async ({ page }) => {
+    await mockTradingData(page);
+    const dialog = await openOptionsTicket(page);
+
+    await expect(dialog.getByText(/Current Price\$200\.00/)).toBeVisible();
+    await expect(dialog.getByText("AAPL price: $200.00")).toBeVisible();
   });
 
   test("positive: Sell side reviews as SELL TO CLOSE", async ({ page }) => {
@@ -153,7 +161,7 @@ test.describe("Options order ticket", () => {
     const dialog = await openOptionsTicket(page);
 
     await dialog.getByRole("button", { name: "Sell", exact: true }).click();
-    await dialog.getByText("$200.00").first().click();
+    await dialog.getByRole("button", { name: /\$200\.00/ }).click();
     await dialog.getByRole("button", { name: "Review" }).click();
 
     await expect(dialog.getByText("SELL TO CLOSE")).toBeVisible();
@@ -170,7 +178,7 @@ test.describe("Options order ticket", () => {
     await mockTradingData(page, { stageResponse: "rejected" });
     const dialog = await openOptionsTicket(page);
 
-    await dialog.getByText("$200.00").click();
+    await dialog.getByRole("button", { name: /\$200\.00/ }).click();
     await dialog.getByRole("button", { name: "Review" }).click();
     await dialog.getByRole("button", { name: "Stage for Approval" }).click();
 
