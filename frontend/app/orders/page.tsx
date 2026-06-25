@@ -1,11 +1,19 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+  type ColumnOrderState,
+  type VisibilityState,
+} from "@tanstack/react-table";
 import { signalApi } from "@/lib/api";
-import { fmtUsd, fmtPct } from "@/lib/utils";
-import { cn } from "@/lib/utils";
-import SortableTh, { SortState, toggleSort, sortRows } from "@/components/SortableTh";
-import { Download } from "lucide-react";
+import { fmtUsd, fmtPct, cn } from "@/lib/utils";
+import { Download, ArrowUp, ArrowDown, ArrowUpDown, Settings2, RotateCcw, GripVertical } from "lucide-react";
 
 const statusColor: Record<string, string> = {
   submitted: "text-brand",
@@ -33,22 +41,33 @@ const TYPE_FILTERS = [
 ] as const;
 type TypeFilter = (typeof TYPE_FILTERS)[number]["key"];
 
-type SortKey =
-  | "ticker" | "type" | "side" | "quantity" | "avg_fill_price" | "exit_price"
-  | "pnl_usd" | "pnl_pct" | "stop_price" | "take_profit_price" | "status" | "is_automated" | "created_at";
+const LAYOUT_KEY = "orders-table-layout-v1";
+
+const DEFAULT_ORDER = [
+  "ticker", "type", "side", "quantity", "entry", "exit", "pnl_usd", "pnl_pct",
+  "stop", "target", "status", "auto", "reason", "time",
+];
+const DEFAULT_VISIBILITY: VisibilityState = {};
+
+function loadLayout(): { order: ColumnOrderState; visibility: VisibilityState; sizing: Record<string, number> } {
+  if (typeof window === "undefined") return { order: DEFAULT_ORDER, visibility: DEFAULT_VISIBILITY, sizing: {} };
+  try {
+    const raw = window.localStorage.getItem(LAYOUT_KEY);
+    if (!raw) return { order: DEFAULT_ORDER, visibility: DEFAULT_VISIBILITY, sizing: {} };
+    const parsed = JSON.parse(raw);
+    return {
+      order: parsed.order?.length ? parsed.order : DEFAULT_ORDER,
+      visibility: parsed.visibility || DEFAULT_VISIBILITY,
+      sizing: parsed.sizing || {},
+    };
+  } catch {
+    return { order: DEFAULT_ORDER, visibility: DEFAULT_VISIBILITY, sizing: {} };
+  }
+}
 
 function typeLabel(o: any): string {
   if (o.asset_type !== "option") return "STOCK";
   return (o.option_right || "option").toUpperCase();
-}
-
-function getSortValue(o: any, key: SortKey) {
-  switch (key) {
-    case "type": return typeLabel(o);
-    case "created_at": return new Date(o.created_at).getTime();
-    case "is_automated": return o.is_automated ? 1 : 0;
-    default: return o[key];
-  }
 }
 
 function TypeBadge({ order }: { order: any }) {
@@ -91,10 +110,118 @@ function exportCsv(rows: any[]) {
   URL.revokeObjectURL(url);
 }
 
+const COLUMN_LABELS: Record<string, string> = {
+  ticker: "Ticker", type: "Type", side: "Side", quantity: "Qty", entry: "Entry", exit: "Exit",
+  pnl_usd: "P&L $", pnl_pct: "P&L %", stop: "Stop", target: "Target", status: "Status",
+  auto: "Auto", reason: "Reason", time: "Time",
+};
+
+const columns: ColumnDef<any>[] = [
+  {
+    id: "ticker", header: "Ticker", accessorKey: "ticker", size: 90,
+    cell: (c) => <span className="font-mono font-bold">{c.row.original.ticker}</span>,
+  },
+  {
+    id: "type", header: "Type", accessorFn: typeLabel, size: 80,
+    cell: (c) => <TypeBadge order={c.row.original} />,
+  },
+  {
+    id: "side", header: "Side", accessorKey: "side", size: 70,
+    cell: (c) => (
+      <span className={cn("font-medium uppercase text-xs", c.row.original.side === "buy" ? "text-buy" : "text-sell")}>
+        {c.row.original.side}
+      </span>
+    ),
+  },
+  { id: "quantity", header: "Qty", accessorKey: "quantity", size: 60 },
+  {
+    id: "entry", header: "Entry", accessorKey: "avg_fill_price", size: 90,
+    cell: (c) => (c.row.original.avg_fill_price ? fmtUsd(c.row.original.avg_fill_price) : "—"),
+  },
+  {
+    id: "exit", header: "Exit", accessorKey: "exit_price", size: 90,
+    cell: (c) => (c.row.original.exit_price ? fmtUsd(c.row.original.exit_price) : "—"),
+  },
+  {
+    id: "pnl_usd", header: "P&L $", accessorKey: "pnl_usd", size: 100,
+    cell: (c) => {
+      const v = c.row.original.pnl_usd;
+      return (
+        <span className={cn("font-semibold", v == null ? "text-gray-500" : v >= 0 ? "text-buy" : "text-sell")}>
+          {v != null ? `${v >= 0 ? "+" : ""}${fmtUsd(v)}` : "—"}
+        </span>
+      );
+    },
+  },
+  {
+    id: "pnl_pct", header: "P&L %", accessorKey: "pnl_pct", size: 90,
+    cell: (c) => {
+      const v = c.row.original.pnl_pct;
+      return (
+        <span className={cn("font-semibold", v == null ? "text-gray-500" : v >= 0 ? "text-buy" : "text-sell")}>
+          {v != null ? `${v >= 0 ? "+" : ""}${fmtPct(v)}` : "—"}
+        </span>
+      );
+    },
+  },
+  {
+    id: "stop", header: "Stop", accessorKey: "stop_price", size: 90,
+    cell: (c) => <span className="text-sell text-xs">{c.row.original.stop_price ? fmtUsd(c.row.original.stop_price) : "—"}</span>,
+  },
+  {
+    id: "target", header: "Target", accessorKey: "take_profit_price", size: 90,
+    cell: (c) => <span className="text-buy text-xs">{c.row.original.take_profit_price ? fmtUsd(c.row.original.take_profit_price) : "—"}</span>,
+  },
+  {
+    id: "status", header: "Status", accessorKey: "status", size: 140,
+    cell: (c) => (
+      <span className={cn("text-xs font-medium uppercase", statusColor[c.row.original.status] || "text-gray-400")}>
+        {c.row.original.status}
+      </span>
+    ),
+  },
+  {
+    id: "auto", header: "Auto", accessorFn: (o) => (o.is_automated ? 1 : 0), size: 60,
+    cell: (c) => <span className="text-xs">{c.row.original.is_automated ? "🤖" : "Manual"}</span>,
+  },
+  {
+    id: "reason", header: "Reason", accessorKey: "rejection_reason", size: 220,
+    cell: (c) => {
+      const reason = c.row.original.rejection_reason;
+      return (
+        <span className="text-xs text-gray-400 block truncate" title={reason || undefined}>
+          {reason || "—"}
+        </span>
+      );
+    },
+  },
+  {
+    id: "time", header: "Time", accessorKey: "created_at", size: 150,
+    cell: (c) => (
+      <span className="text-xs text-gray-400 whitespace-nowrap">{new Date(c.row.original.created_at).toLocaleString()}</span>
+    ),
+  },
+];
+
 export default function OrdersPage() {
   const [period, setPeriod] = useState<Period>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
-  const [sort, setSort] = useState<SortState<SortKey>>(null);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(DEFAULT_ORDER);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(DEFAULT_VISIBILITY);
+  const [columnSizing, setColumnSizing] = useState<Record<string, number>>({});
+  const [draggedCol, setDraggedCol] = useState<string | null>(null);
+
+  useEffect(() => {
+    const layout = loadLayout();
+    setColumnOrder(layout.order);
+    setColumnVisibility(layout.visibility);
+    setColumnSizing(layout.sizing);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(LAYOUT_KEY, JSON.stringify({ order: columnOrder, visibility: columnVisibility, sizing: columnSizing }));
+  }, [columnOrder, columnVisibility, columnSizing]);
 
   const { data: orders = [], isFetching } = useQuery({
     queryKey: ["orders", period],
@@ -102,18 +229,53 @@ export default function OrdersPage() {
     refetchInterval: 30_000,
   });
 
-  const filtered = orders.filter((o: any) => {
-    if (typeFilter === "all") return true;
-    if (typeFilter === "equity") return o.asset_type !== "option";
-    return o.asset_type === "option" && o.option_right === typeFilter;
-  });
-  const displayed = sortRows(filtered, sort, getSortValue);
-  const onSort = (key: SortKey) => setSort((s) => toggleSort(s, key));
+  const filtered = useMemo(
+    () =>
+      orders.filter((o: any) => {
+        if (typeFilter === "all") return true;
+        if (typeFilter === "equity") return o.asset_type !== "option";
+        return o.asset_type === "option" && o.option_right === typeFilter;
+      }),
+    [orders, typeFilter]
+  );
 
-  const closed = displayed.filter((o: any) => o.pnl_usd != null);
+  const table = useReactTable({
+    data: filtered,
+    columns,
+    state: { sorting, columnOrder, columnVisibility, columnSizing },
+    onSortingChange: setSorting,
+    onColumnOrderChange: setColumnOrder,
+    onColumnVisibilityChange: setColumnVisibility,
+    onColumnSizingChange: setColumnSizing,
+    columnResizeMode: "onChange",
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
+  const closed = filtered.filter((o: any) => o.pnl_usd != null);
   const totalPnl = closed.reduce((sum: number, o: any) => sum + o.pnl_usd, 0);
   const winCount = closed.filter((o: any) => o.pnl_usd > 0).length;
   const winRate = closed.length ? winCount / closed.length : null;
+
+  function resetLayout() {
+    setColumnOrder(DEFAULT_ORDER);
+    setColumnVisibility(DEFAULT_VISIBILITY);
+    setColumnSizing({});
+    window.localStorage.removeItem(LAYOUT_KEY);
+  }
+
+  function moveColumn(dragged: string, target: string) {
+    if (dragged === target) return;
+    setColumnOrder((old) => {
+      const next = [...old];
+      const from = next.indexOf(dragged);
+      const to = next.indexOf(target);
+      if (from === -1 || to === -1) return old;
+      next.splice(from, 1);
+      next.splice(to, 0, dragged);
+      return next;
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -151,13 +313,43 @@ export default function OrdersPage() {
             </button>
           ))}
         </div>
-        <button
-          onClick={() => exportCsv(displayed)}
-          disabled={displayed.length === 0}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-40 transition-colors"
-        >
-          <Download size={13} /> Export CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <details className="relative">
+            <summary className="list-none flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer select-none">
+              <Settings2 size={13} /> Columns
+            </summary>
+            <div className="absolute right-0 mt-2 w-52 card z-20 space-y-1 p-3">
+              {DEFAULT_ORDER.map((id) => {
+                const col = table.getColumn(id);
+                if (!col) return null;
+                return (
+                  <label key={id} className="flex items-center gap-2 text-xs text-gray-300 py-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="accent-brand"
+                      checked={col.getIsVisible()}
+                      onChange={col.getToggleVisibilityHandler()}
+                    />
+                    {COLUMN_LABELS[id]}
+                  </label>
+                );
+              })}
+              <button
+                onClick={resetLayout}
+                className="w-full flex items-center justify-center gap-1.5 mt-2 pt-2 border-t border-gray-800 text-xs text-gray-400 hover:text-gray-200"
+              >
+                <RotateCcw size={12} /> Reset layout
+              </button>
+            </div>
+          </details>
+          <button
+            onClick={() => exportCsv(table.getSortedRowModel().rows.map((r) => r.original))}
+            disabled={filtered.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-40 transition-colors"
+          >
+            <Download size={13} /> Export CSV
+          </button>
+        </div>
       </div>
 
       {closed.length > 0 && (
@@ -186,52 +378,61 @@ export default function OrdersPage() {
         </div>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="text-sm" style={{ width: table.getTotalSize(), tableLayout: "fixed" }}>
             <thead>
-              <tr className="text-gray-400 text-left border-b border-gray-800">
-                <SortableTh label="Ticker" sortKey="ticker" sort={sort} onSort={onSort} />
-                <SortableTh label="Type" sortKey="type" sort={sort} onSort={onSort} />
-                <SortableTh label="Side" sortKey="side" sort={sort} onSort={onSort} />
-                <SortableTh label="Qty" sortKey="quantity" sort={sort} onSort={onSort} />
-                <SortableTh label="Entry" sortKey="avg_fill_price" sort={sort} onSort={onSort} />
-                <SortableTh label="Exit" sortKey="exit_price" sort={sort} onSort={onSort} />
-                <SortableTh label="P&L $" sortKey="pnl_usd" sort={sort} onSort={onSort} />
-                <SortableTh label="P&L %" sortKey="pnl_pct" sort={sort} onSort={onSort} />
-                <SortableTh label="Stop" sortKey="stop_price" sort={sort} onSort={onSort} />
-                <SortableTh label="Target" sortKey="take_profit_price" sort={sort} onSort={onSort} />
-                <SortableTh label="Status" sortKey="status" sort={sort} onSort={onSort} />
-                <SortableTh label="Auto" sortKey="is_automated" sort={sort} onSort={onSort} />
-                <th className="pb-3">Reason</th>
-                <SortableTh label="Time" sortKey="created_at" sort={sort} onSort={onSort} />
-              </tr>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id} className="text-gray-400 text-left border-b border-gray-800">
+                  {headerGroup.headers.map((header) => {
+                    const sortDir = header.column.getIsSorted();
+                    return (
+                      <th
+                        key={header.id}
+                        style={{ width: header.getSize() }}
+                        className={cn("relative pb-3 pr-2 select-none", draggedCol === header.column.id && "opacity-40")}
+                        draggable
+                        onDragStart={() => setDraggedCol(header.column.id)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => {
+                          if (draggedCol) moveColumn(draggedCol, header.column.id);
+                          setDraggedCol(null);
+                        }}
+                        onDragEnd={() => setDraggedCol(null)}
+                      >
+                        <div className="flex items-center gap-1 cursor-grab active:cursor-grabbing">
+                          <GripVertical size={11} className="text-gray-600 shrink-0" />
+                          <button
+                            onClick={header.column.getToggleSortingHandler()}
+                            className="flex items-center gap-1 hover:text-gray-200 transition-colors truncate"
+                          >
+                            <span className="truncate">{flexRender(header.column.columnDef.header, header.getContext())}</span>
+                            {sortDir === "asc" ? <ArrowUp size={12} className="shrink-0" />
+                              : sortDir === "desc" ? <ArrowDown size={12} className="shrink-0" />
+                              : <ArrowUpDown size={12} className="text-gray-600 shrink-0" />}
+                          </button>
+                        </div>
+                        <div
+                          onMouseDown={(e) => { e.stopPropagation(); header.getResizeHandler()(e); }}
+                          onTouchStart={(e) => { e.stopPropagation(); header.getResizeHandler()(e); }}
+                          draggable={false}
+                          className={cn(
+                            "absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-brand/50 transition-colors",
+                            header.column.getIsResizing() && "bg-brand"
+                          )}
+                        />
+                      </th>
+                    );
+                  })}
+                </tr>
+              ))}
             </thead>
             <tbody className="divide-y divide-gray-800/50">
-              {displayed.map((o: any) => (
-                <tr key={o.id} className="hover:bg-gray-800/30 transition-colors">
-                  <td className="py-2 font-mono font-bold">{o.ticker}</td>
-                  <td className="py-2"><TypeBadge order={o} /></td>
-                  <td className={cn("py-2 font-medium uppercase text-xs", o.side === "buy" ? "text-buy" : "text-sell")}>
-                    {o.side}
-                  </td>
-                  <td className="py-2">{o.quantity}</td>
-                  <td className="py-2">{o.avg_fill_price ? fmtUsd(o.avg_fill_price) : "—"}</td>
-                  <td className="py-2">{o.exit_price ? fmtUsd(o.exit_price) : "—"}</td>
-                  <td className={cn("py-2 font-semibold", o.pnl_usd == null ? "text-gray-500" : o.pnl_usd >= 0 ? "text-buy" : "text-sell")}>
-                    {o.pnl_usd != null ? `${o.pnl_usd >= 0 ? "+" : ""}${fmtUsd(o.pnl_usd)}` : "—"}
-                  </td>
-                  <td className={cn("py-2 font-semibold", o.pnl_pct == null ? "text-gray-500" : o.pnl_pct >= 0 ? "text-buy" : "text-sell")}>
-                    {o.pnl_pct != null ? `${o.pnl_pct >= 0 ? "+" : ""}${fmtPct(o.pnl_pct)}` : "—"}
-                  </td>
-                  <td className="py-2 text-sell text-xs">{o.stop_price ? fmtUsd(o.stop_price) : "—"}</td>
-                  <td className="py-2 text-buy text-xs">{o.take_profit_price ? fmtUsd(o.take_profit_price) : "—"}</td>
-                  <td className={cn("py-2 text-xs font-medium uppercase", statusColor[o.status] || "text-gray-400")}>
-                    {o.status}
-                  </td>
-                  <td className="py-2 text-xs">{o.is_automated ? "🤖" : "Manual"}</td>
-                  <td className="py-2 text-xs text-gray-400 max-w-xs truncate">{o.rejection_reason || "—"}</td>
-                  <td className="py-2 text-xs text-gray-400 whitespace-nowrap">
-                    {new Date(o.created_at).toLocaleString()}
-                  </td>
+              {table.getSortedRowModel().rows.map((row) => (
+                <tr key={row.id} className="hover:bg-gray-800/30 transition-colors">
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} style={{ width: cell.column.getSize() }} className="py-2 pr-2 overflow-hidden">
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>
