@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useReactTable,
   getCoreRowModel,
@@ -13,7 +13,7 @@ import {
 } from "@tanstack/react-table";
 import { signalApi } from "@/lib/api";
 import { fmtUsd, fmtPct, cn } from "@/lib/utils";
-import { Download, ArrowUp, ArrowDown, ArrowUpDown, Settings2, RotateCcw, GripVertical } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, ArrowUpDown, Settings2, RotateCcw, GripVertical, Check, X as XIcon } from "lucide-react";
 
 const statusColor: Record<string, string> = {
   submitted: "text-brand",
@@ -43,9 +43,15 @@ type TypeFilter = (typeof TYPE_FILTERS)[number]["key"];
 
 const LAYOUT_KEY = "orders-table-layout-v1";
 
+type OrdersTableMeta = {
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+  busyId: string | null;
+};
+
 const DEFAULT_ORDER = [
   "ticker", "type", "side", "quantity", "entry", "exit", "pnl_usd", "pnl_pct",
-  "stop", "target", "status", "auto", "reason", "time",
+  "stop", "target", "status", "action", "auto", "reason", "time",
 ];
 const DEFAULT_VISIBILITY: VisibilityState = {};
 
@@ -113,10 +119,10 @@ function exportCsv(rows: any[]) {
 const COLUMN_LABELS: Record<string, string> = {
   ticker: "Ticker", type: "Type", side: "Side", quantity: "Qty", entry: "Entry", exit: "Exit",
   pnl_usd: "P&L $", pnl_pct: "P&L %", stop: "Stop", target: "Target", status: "Status",
-  auto: "Auto", reason: "Reason", time: "Time",
+  action: "Action", auto: "Auto", reason: "Reason", time: "Time",
 };
 
-const columns: ColumnDef<any>[] = [
+const baseColumns: ColumnDef<any>[] = [
   {
     id: "ticker", header: "Ticker", accessorKey: "ticker", size: 90,
     cell: (c) => <span className="font-mono font-bold">{c.row.original.ticker}</span>,
@@ -181,6 +187,33 @@ const columns: ColumnDef<any>[] = [
     ),
   },
   {
+    id: "action", header: "Action", size: 140, enableSorting: false,
+    cell: (c) => {
+      const o = c.row.original;
+      if (o.status !== "pending_approval") return <span className="text-gray-600 text-xs">—</span>;
+      const meta = c.table.options.meta as OrdersTableMeta;
+      const busy = meta.busyId === o.id;
+      return (
+        <div className="flex gap-1.5">
+          <button
+            onClick={() => meta.onApprove(o.id)}
+            disabled={busy}
+            className="flex items-center gap-1 px-2 py-1 rounded bg-buy text-white text-[11px] font-semibold hover:bg-buy/80 disabled:opacity-50"
+          >
+            <Check size={11} /> Approve
+          </button>
+          <button
+            onClick={() => meta.onReject(o.id)}
+            disabled={busy}
+            className="flex items-center gap-1 px-2 py-1 rounded bg-gray-700 text-gray-200 text-[11px] font-semibold hover:bg-gray-600 disabled:opacity-50"
+          >
+            <XIcon size={11} />
+          </button>
+        </div>
+      );
+    },
+  },
+  {
     id: "auto", header: "Auto", accessorFn: (o) => (o.is_automated ? 1 : 0), size: 60,
     cell: (c) => <span className="text-xs">{c.row.original.is_automated ? "🤖" : "Manual"}</span>,
   },
@@ -204,6 +237,7 @@ const columns: ColumnDef<any>[] = [
 ];
 
 export default function OrdersPage() {
+  const qc = useQueryClient();
   const [period, setPeriod] = useState<Period>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -229,6 +263,17 @@ export default function OrdersPage() {
     refetchInterval: 30_000,
   });
 
+  const approveMut = useMutation({
+    mutationFn: (id: string) => signalApi.approveOptionOrder(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
+  });
+  const rejectMut = useMutation({
+    mutationFn: (id: string) => signalApi.rejectOptionOrder(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
+  });
+  const busyPending = approveMut.isPending || rejectMut.isPending;
+  const busyId = busyPending ? (approveMut.variables ?? rejectMut.variables ?? null) : null;
+
   const filtered = useMemo(
     () =>
       orders.filter((o: any) => {
@@ -241,7 +286,7 @@ export default function OrdersPage() {
 
   const table = useReactTable({
     data: filtered,
-    columns,
+    columns: baseColumns,
     state: { sorting, columnOrder, columnVisibility, columnSizing },
     onSortingChange: setSorting,
     onColumnOrderChange: setColumnOrder,
@@ -250,6 +295,11 @@ export default function OrdersPage() {
     columnResizeMode: "onChange",
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    meta: {
+      onApprove: (id: string) => approveMut.mutate(id),
+      onReject: (id: string) => rejectMut.mutate(id),
+      busyId,
+    } satisfies OrdersTableMeta,
   });
 
   const closed = filtered.filter((o: any) => o.pnl_usd != null);

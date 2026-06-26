@@ -172,13 +172,18 @@ async def run_options_automation_scan() -> None:
 
 
 def start_scheduler() -> None:
-    # 5-minute intraday signals (day trading)
+    # 5-minute intraday signals (day trading) — 9am-3:59pm ET covers the
+    # 9:30-16:00 ET session with margin on both ends. Must pin timezone
+    # explicitly: the scheduler itself runs in UTC, so without this the
+    # "9-15" hours fire at 5am-11:59am ET instead — missing the entire
+    # afternoon of the trading day.
     scheduler.add_job(
         run_signal_cycle,
         trigger="cron",
-        minute="*/5",           # every 5 minutes during market hours
+        minute="*/5",
         hour="9-15",
         day_of_week="mon-fri",
+        timezone="America/New_York",
         args=["5Min"],
         id="5min_signals",
         replace_existing=True,
@@ -192,6 +197,7 @@ def start_scheduler() -> None:
         minute="*/15",
         hour="9-15",
         day_of_week="mon-fri",
+        timezone="America/New_York",
         args=["15Min"],
         id="15min_signals",
         replace_existing=True,
@@ -215,6 +221,7 @@ def start_scheduler() -> None:
         trigger="cron",
         hour=16,
         minute=15,              # 15 min after US market close (4pm ET)
+        timezone="America/New_York",
         args=["1Day"],
         id="daily_signals",
         replace_existing=True,
@@ -228,6 +235,7 @@ def start_scheduler() -> None:
         minute="*/15",
         hour="9-15",
         day_of_week="mon-fri",
+        timezone="America/New_York",
         args=["1Day"],
         id="day_trade_universe_15min",
         replace_existing=True,
@@ -238,6 +246,7 @@ def start_scheduler() -> None:
         trigger="cron",
         hour=16,
         minute=20,
+        timezone="America/New_York",
         args=["1Day"],
         id="day_trade_universe_daily",
         replace_existing=True,
@@ -252,6 +261,7 @@ def start_scheduler() -> None:
         minute="5,20,35,50",
         hour="9-15",
         day_of_week="mon-fri",
+        timezone="America/New_York",
         id="options_automation_scan",
         replace_existing=True,
         max_instances=1,
