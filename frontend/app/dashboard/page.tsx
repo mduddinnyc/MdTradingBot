@@ -1,14 +1,20 @@
 "use client";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { authApi, brokerApi, signalApi } from "@/lib/api";
 import { fmtUsd, fmtPct } from "@/lib/utils";
 import SignalBadge from "@/components/SignalBadge";
+import SortableTh, { SortState, toggleSort, sortRows } from "@/components/SortableTh";
 import Link from "next/link";
+
+type SignalSortKey = "symbol" | "signal_type" | "confidence" | "entry_price" | "target_price" | "pattern_detected";
 
 export default function DashboardPage() {
   const { data: user } = useQuery({ queryKey: ["me"], queryFn: authApi.me });
   const { data: connections = [] } = useQuery({ queryKey: ["connections"], queryFn: brokerApi.list });
   const { data: signals = [] } = useQuery({ queryKey: ["signals"], queryFn: () => signalApi.list(10) });
+  const [sort, setSort] = useState<SortState<SignalSortKey>>(null);
+  const sortedSignals = sortRows(signals, sort, (row, key) => row[key]);
 
   const conn = connections[0];
   const { data: account } = useQuery({
@@ -59,16 +65,16 @@ export default function DashboardPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-gray-400 text-left border-b border-gray-800">
-                <th className="pb-2">Symbol</th>
-                <th className="pb-2">Signal</th>
-                <th className="pb-2">Confidence</th>
-                <th className="pb-2">Entry</th>
-                <th className="pb-2">Target</th>
-                <th className="pb-2">Pattern</th>
+                <SortableTh label="Symbol" sortKey="symbol" sort={sort} onSort={(k) => setSort(toggleSort(sort, k))} />
+                <SortableTh label="Signal" sortKey="signal_type" sort={sort} onSort={(k) => setSort(toggleSort(sort, k))} />
+                <SortableTh label="Confidence" sortKey="confidence" sort={sort} onSort={(k) => setSort(toggleSort(sort, k))} />
+                <SortableTh label="Entry" sortKey="entry_price" sort={sort} onSort={(k) => setSort(toggleSort(sort, k))} />
+                <SortableTh label="Target" sortKey="target_price" sort={sort} onSort={(k) => setSort(toggleSort(sort, k))} />
+                <SortableTh label="Pattern" sortKey="pattern_detected" sort={sort} onSort={(k) => setSort(toggleSort(sort, k))} />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/50">
-              {signals.map((s: any) => (
+              {sortedSignals.map((s: any) => (
                 <tr key={s.id} className="hover:bg-gray-800/30 transition-colors">
                   <td className="py-2 font-mono font-bold">{s.symbol}</td>
                   <td className="py-2"><SignalBadge type={s.signal_type} /></td>
