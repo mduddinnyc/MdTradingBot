@@ -9,6 +9,7 @@ import { Shield, AlertTriangle, OctagonX } from "lucide-react";
 import { fmtPct } from "@/lib/utils";
 import OptionsAutomationPanel from "@/components/OptionsAutomationPanel";
 import RiskProfileWizard from "@/components/RiskProfileWizard";
+import StrategiesPanel from "@/components/StrategiesPanel";
 
 const schema = z.object({
   broker_connection_id: z.string().uuid(),
@@ -327,6 +328,8 @@ export default function AutomationPage() {
         </button>
       </form>
       )}
+
+      <StrategiesPanel />
 
       <OptionsAutomationPanel />
     </div>

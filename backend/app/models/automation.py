@@ -71,6 +71,53 @@ class Order(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class Strategy(Base):
+    """
+    System-seeded catalog of named signal-fusion profiles — same
+    indicators signal_engine.py always computed (RSI/MACD/BB%/EMA/ADX/
+    volume/VWAP/patterns/regime), just different weights and a regime
+    gate per strategy instead of one fixed weighting. See seed data in
+    migration 0009. `is_system=False` is reserved for future user-defined
+    strategies; nothing creates those yet.
+    """
+    __tablename__ = "strategies"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    key: Mapped[str] = mapped_column(String(40), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+
+    w_trend: Mapped[float] = mapped_column(Float, nullable=False)
+    w_momentum: Mapped[float] = mapped_column(Float, nullable=False)
+    w_pattern: Mapped[float] = mapped_column(Float, nullable=False)
+    allowed_regimes: Mapped[list[str] | None] = mapped_column(ARRAY(String))  # null = any regime
+    min_volume_ratio: Mapped[float | None] = mapped_column(Float)             # extra gate, e.g. breakout needs volume confirmation
+
+    is_system: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserStrategyConfig(Base):
+    """Per-user enablement of a Strategy — gated by the parent
+    AutomationConfig.is_enabled, which stays the account-wide safety rail
+    (daily loss cap, PDT, max open positions, cooldown). This table only
+    controls which strategies are allowed to fire and how much capital
+    each gets, on top of that."""
+    __tablename__ = "user_strategy_configs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    broker_connection_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("broker_connections.id", ondelete="CASCADE"), nullable=False)
+    strategy_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("strategies.id", ondelete="CASCADE"), nullable=False)
+
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    mode: Mapped[str] = mapped_column(String(10), nullable=False, default="manual")  # "auto" | "manual"
+    allocated_capital_usd: Mapped[float] = mapped_column(Float, nullable=False, default=1000.0)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class OptionsAutomationConfig(Base):
     """Paper-trading-only options automation, gated behind manual approval
     by default (require_manual_approval) — see options_execution.py."""

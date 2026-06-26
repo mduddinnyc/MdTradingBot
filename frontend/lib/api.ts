@@ -164,6 +164,20 @@ export const signalApi = {
   orders: (limit = 100, period: "today" | "7d" | "30d" | "1y" | "all" = "all") =>
     api.get("/signals/orders", { params: { limit, period } }).then((r) => r.data),
 
+  strategies: () => api.get("/signals/strategies").then((r) => r.data),
+
+  updateStrategyConfig: (
+    strategyId: string,
+    body: { broker_connection_id: string; is_enabled: boolean; mode: "auto" | "manual"; allocated_capital_usd: number }
+  ) => api.put(`/signals/strategies/${strategyId}/config`, body).then((r) => r.data),
+
+  strategyPerformance: (period: "today" | "7d" | "30d" | "1y" | "all" = "7d") =>
+    api.get("/signals/strategies/performance", { params: { period } }).then((r) => r.data),
+
+  approveOrder: (orderId: string) => api.post(`/signals/orders/${orderId}/approve`).then((r) => r.data),
+
+  rejectOrder: (orderId: string) => api.post(`/signals/orders/${orderId}/reject`).then((r) => r.data),
+
   placeManualOrder: (body: {
     broker_connection_id: string;
     ticker: string;

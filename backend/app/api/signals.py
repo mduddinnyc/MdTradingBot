@@ -10,7 +10,7 @@ from sqlalchemy import select, update
 from app.core.audit import log as audit_log
 from app.core.deps import CurrentUser, DB
 from app.core.encryption import decrypt_secret
-from app.models.automation import AutomationConfig, OptionsAutomationConfig, Order
+from app.models.automation import AutomationConfig, OptionsAutomationConfig, Order, Strategy, UserStrategyConfig
 from app.models.broker import BrokerConnection
 from app.models.market import Symbol, Watchlist, WatchlistItem
 from app.models.signal import Signal
@@ -27,9 +27,13 @@ from app.schemas.signal import (
     PendingOptionOrderResponse,
     RankedSignalResponse,
     SignalResponse,
+    StrategyConfigRequest,
+    StrategyPerformanceResponse,
+    StrategyResponse,
     WatchlistAddRequest,
 )
 from app.services.day_trade_universe import DAY_TRADE_UNIVERSE
+from app.services import execution as exec_svc
 from app.services import market_data as md_svc
 from app.services import signal_engine
 from app.services import notifications as notif_svc
@@ -830,11 +834,55 @@ async def reject_pending_option_order(order_id: uuid.UUID, request: Request, cur
 
 # ── Orders ─────────────────────────────────────────────────────
 
+async def _get_realized_pnl_map(db: DB, user_id: uuid.UUID, orders: list[Order], since: datetime | None) -> dict[uuid.UUID, dict]:
+    """
+    Matches orders against the broker's own closed-position ledger to find
+    realized exit/P&L. Never estimated locally — only what the broker's
+    own gain/loss history confirms. Greedy nearest-date match per symbol,
+    shared by /orders and the strategy performance endpoints so the two
+    can never disagree on what counts as a real, closed trade.
+    """
+    if not orders:
+        return {}
+    result = await db.execute(
+        select(BrokerConnection).where(BrokerConnection.user_id == user_id, BrokerConnection.is_active == True)
+    )
+    conn = result.scalars().first()
+    if not conn:
+        return {}
+    adapter = get_adapter(conn.broker_name)
+    if not hasattr(adapter, "get_gain_loss"):
+        return {}
+
+    try:
+        closed = adapter.get_gain_loss(conn, start=since.strftime("%Y-%m-%d") if since else None)
+    except Exception:
+        closed = []
+
+    unmatched = list(closed)
+    pnl_map: dict[uuid.UUID, dict] = {}
+    for order in orders:
+        symbol = order.option_symbol if order.asset_type == "option" else order.ticker
+        open_ref = (order.filled_at or order.submitted_at or order.created_at).replace(tzinfo=None)
+        candidates = [c for c in unmatched if c["symbol"] == symbol and c.get("open_date")]
+        if not candidates:
+            continue
+        best = min(candidates, key=lambda c: abs((_parse_broker_date(c["open_date"]).replace(tzinfo=None) - open_ref).days))
+        pnl_map[order.id] = {
+            "exit_price": best["exit_price"],
+            "closed_at": _parse_broker_date(best["close_date"]),
+            "pnl_usd": best["gain_loss"],
+            "pnl_pct": best["gain_loss_pct"],
+        }
+        unmatched.remove(best)
+    return pnl_map
+
+
 @router.get("/orders", response_model=list[OrderResponse])
 async def get_orders(current_user: CurrentUser, db: DB, limit: int = 100, period: str = "all"):
     """
     Order audit log, optionally enriched with realized entry/exit/P&L for
-    orders Tradier's own closed-position ledger confirms were closed.
+    orders the broker's own closed-position ledger confirms were closed.
     We don't track closing fills ourselves yet, so exit/P&L stay null for
     anything that ledger doesn't corroborate — never estimated locally.
     """
@@ -851,37 +899,238 @@ async def get_orders(current_user: CurrentUser, db: DB, limit: int = 100, period
     orders = result.scalars().all()
     responses = [OrderResponse.model_validate(o) for o in orders]
 
-    result = await db.execute(
-        select(BrokerConnection).where(
-            BrokerConnection.user_id == current_user.id, BrokerConnection.is_active == True
+    pnl_map = await _get_realized_pnl_map(db, current_user.id, orders, since)
+    for resp, order in zip(responses, orders):
+        info = pnl_map.get(order.id)
+        if info:
+            resp.exit_price = info["exit_price"]
+            resp.closed_at = info["closed_at"]
+            resp.pnl_usd = info["pnl_usd"]
+            resp.pnl_pct = info["pnl_pct"]
+
+    signal_ids = [o.signal_id for o in orders if o.signal_id]
+    if signal_ids:
+        result = await db.execute(
+            select(Signal.id, Strategy.name)
+            .join(Strategy, Signal.strategy_id == Strategy.id)
+            .where(Signal.id.in_(signal_ids))
         )
-    )
-    conn = result.scalars().first()
-    adapter = get_adapter(conn.broker_name) if conn else None
-
-    if conn and hasattr(adapter, "get_gain_loss"):
-        try:
-            closed = adapter.get_gain_loss(conn, start=since.strftime("%Y-%m-%d") if since else None)
-        except Exception:
-            closed = []
-
-        # Greedy nearest-date match per symbol — good enough for a single
-        # account's history; doesn't try to be a precise lot-accounting system.
-        unmatched = list(closed)
+        strategy_by_signal = dict(result.all())
         for resp, order in zip(responses, orders):
-            symbol = order.option_symbol if order.asset_type == "option" else order.ticker
-            open_ref = (order.filled_at or order.submitted_at or order.created_at).replace(tzinfo=None)
-            candidates = [c for c in unmatched if c["symbol"] == symbol and c.get("open_date")]
-            if not candidates:
-                continue
-            best = min(candidates, key=lambda c: abs((_parse_broker_date(c["open_date"]).replace(tzinfo=None) - open_ref).days))
-            resp.exit_price = best["exit_price"]
-            resp.closed_at = _parse_broker_date(best["close_date"])
-            resp.pnl_usd = best["gain_loss"]
-            resp.pnl_pct = best["gain_loss_pct"]
-            unmatched.remove(best)
+            if order.signal_id in strategy_by_signal:
+                resp.strategy_name = strategy_by_signal[order.signal_id]
 
     return responses
+
+
+# ── Strategies ─────────────────────────────────────────────────
+
+@router.get("/strategies", response_model=list[StrategyResponse])
+async def get_strategies(current_user: CurrentUser, db: DB):
+    result = await db.execute(select(Strategy).order_by(Strategy.key))
+    strategies = result.scalars().all()
+
+    result = await db.execute(
+        select(BrokerConnection).where(BrokerConnection.user_id == current_user.id, BrokerConnection.is_active == True)
+    )
+    conn = result.scalars().first()
+
+    config_by_strategy: dict[uuid.UUID, UserStrategyConfig] = {}
+    if conn:
+        result = await db.execute(
+            select(UserStrategyConfig).where(
+                UserStrategyConfig.user_id == current_user.id,
+                UserStrategyConfig.broker_connection_id == conn.id,
+            )
+        )
+        config_by_strategy = {c.strategy_id: c for c in result.scalars().all()}
+
+    # Real win-rate/P&L per strategy from this user's own closed orders, all-time.
+    result = await db.execute(
+        select(Order, Signal.strategy_id)
+        .join(Signal, Order.signal_id == Signal.id)
+        .where(Order.user_id == current_user.id, Signal.strategy_id.is_not(None))
+    )
+    rows = result.all()
+    orders_by_strategy: dict[uuid.UUID, list[Order]] = {}
+    for order, strategy_id in rows:
+        orders_by_strategy.setdefault(strategy_id, []).append(order)
+
+    all_orders = [o for o, _ in rows]
+    pnl_map = await _get_realized_pnl_map(db, current_user.id, all_orders, since=None)
+
+    out = []
+    for strat in strategies:
+        cfg = config_by_strategy.get(strat.id)
+        strat_orders = orders_by_strategy.get(strat.id, [])
+        closed_pnls = [pnl_map[o.id]["pnl_usd"] for o in strat_orders if o.id in pnl_map]
+
+        out.append(StrategyResponse(
+            id=strat.id, key=strat.key, name=strat.name, description=strat.description,
+            w_trend=strat.w_trend, w_momentum=strat.w_momentum, w_pattern=strat.w_pattern,
+            allowed_regimes=strat.allowed_regimes, min_volume_ratio=strat.min_volume_ratio,
+            is_enabled=cfg.is_enabled if cfg else False,
+            mode=cfg.mode if cfg else "manual",
+            allocated_capital_usd=cfg.allocated_capital_usd if cfg else 1000.0,
+            total_trades=len(closed_pnls),
+            wins=sum(1 for p in closed_pnls if p > 0),
+            win_rate=(sum(1 for p in closed_pnls if p > 0) / len(closed_pnls)) if closed_pnls else None,
+            total_pnl_usd=sum(closed_pnls) if closed_pnls else None,
+        ))
+    return out
+
+
+@router.put("/strategies/{strategy_id}/config", response_model=StrategyResponse)
+async def update_strategy_config(strategy_id: uuid.UUID, body: StrategyConfigRequest, request: Request, current_user: CurrentUser, db: DB):
+    result = await db.execute(select(Strategy).where(Strategy.id == strategy_id))
+    strat = result.scalar_one_or_none()
+    if not strat:
+        raise HTTPException(status_code=404, detail="Strategy not found")
+
+    result = await db.execute(
+        select(BrokerConnection).where(
+            BrokerConnection.id == body.broker_connection_id,
+            BrokerConnection.user_id == current_user.id,
+            BrokerConnection.is_active == True,
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=404, detail="Broker connection not found")
+
+    result = await db.execute(
+        select(UserStrategyConfig).where(
+            UserStrategyConfig.user_id == current_user.id,
+            UserStrategyConfig.broker_connection_id == conn.id,
+            UserStrategyConfig.strategy_id == strategy_id,
+        )
+    )
+    cfg = result.scalar_one_or_none()
+    if cfg:
+        cfg.is_enabled = body.is_enabled
+        cfg.mode = body.mode
+        cfg.allocated_capital_usd = body.allocated_capital_usd
+    else:
+        cfg = UserStrategyConfig(
+            user_id=current_user.id, broker_connection_id=conn.id, strategy_id=strategy_id,
+            is_enabled=body.is_enabled, mode=body.mode, allocated_capital_usd=body.allocated_capital_usd,
+        )
+        db.add(cfg)
+    await db.flush()
+
+    await audit_log(
+        db, action="STRATEGY_CONFIG_UPDATED", outcome="success",
+        user_id=current_user.id, resource_type="strategy", resource_id=strategy_id, request=request,
+        metadata={"key": strat.key, "is_enabled": body.is_enabled, "mode": body.mode, "allocated_capital_usd": body.allocated_capital_usd},
+    )
+
+    return StrategyResponse(
+        id=strat.id, key=strat.key, name=strat.name, description=strat.description,
+        w_trend=strat.w_trend, w_momentum=strat.w_momentum, w_pattern=strat.w_pattern,
+        allowed_regimes=strat.allowed_regimes, min_volume_ratio=strat.min_volume_ratio,
+        is_enabled=cfg.is_enabled, mode=cfg.mode, allocated_capital_usd=cfg.allocated_capital_usd,
+        total_trades=0, wins=0, win_rate=None, total_pnl_usd=None,
+    )
+
+
+@router.get("/strategies/performance", response_model=list[StrategyPerformanceResponse])
+async def get_strategy_performance(current_user: CurrentUser, db: DB, period: str = "7d"):
+    """Daily/weekly/monthly comparison: which strategy is actually making money for this user, from real closed trades only."""
+    since = None
+    if period == "today":
+        since = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period in _ORDER_HISTORY_RANGE_DAYS:
+        since = datetime.now(timezone.utc) - timedelta(days=_ORDER_HISTORY_RANGE_DAYS[period])
+
+    query = (
+        select(Order, Signal.strategy_id, Strategy.key, Strategy.name)
+        .join(Signal, Order.signal_id == Signal.id)
+        .join(Strategy, Signal.strategy_id == Strategy.id)
+        .where(Order.user_id == current_user.id)
+    )
+    if since:
+        query = query.where(Order.created_at >= since)
+    result = await db.execute(query)
+    rows = result.all()
+
+    grouped: dict[uuid.UUID, dict] = {}
+    for order, strategy_id, key, name in rows:
+        grouped.setdefault(strategy_id, {"key": key, "name": name, "orders": []})["orders"].append(order)
+
+    all_orders = [o for o, _, _, _ in rows]
+    pnl_map = await _get_realized_pnl_map(db, current_user.id, all_orders, since)
+
+    out = []
+    for strategy_id, info in grouped.items():
+        closed = [(o, pnl_map[o.id]) for o in info["orders"] if o.id in pnl_map]
+        pnls = [p["pnl_usd"] for _, p in closed]
+        pcts = [p["pnl_pct"] for _, p in closed if p["pnl_pct"] is not None]
+        out.append(StrategyPerformanceResponse(
+            strategy_id=strategy_id, strategy_key=info["key"], strategy_name=info["name"],
+            trades=len(closed),
+            wins=sum(1 for p in pnls if p > 0),
+            win_rate=(sum(1 for p in pnls if p > 0) / len(pnls)) if pnls else None,
+            total_pnl_usd=sum(pnls) if pnls else None,
+            avg_pnl_pct=(sum(pcts) / len(pcts)) if pcts else None,
+        ))
+
+    out.sort(key=lambda r: (r.total_pnl_usd if r.total_pnl_usd is not None else float("-inf")), reverse=True)
+    return out
+
+
+@router.post("/orders/{order_id}/approve", response_model=OrderResponse)
+async def approve_order(order_id: uuid.UUID, request: Request, current_user: CurrentUser, db: DB):
+    """Unified approve for any pending_approval order — dispatches by
+    asset_type since options and equity strategy orders place through
+    different broker calls but share the same Approve button on the
+    Orders page."""
+    result = await db.execute(select(Order).where(Order.id == order_id, Order.user_id == current_user.id))
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.status != "pending_approval":
+        raise HTTPException(status_code=400, detail=f"Order is not pending approval (status={order.status})")
+
+    result = await db.execute(select(BrokerConnection).where(BrokerConnection.id == order.broker_connection_id))
+    conn = result.scalar_one_or_none()
+    if not conn or not conn.is_active:
+        raise HTTPException(status_code=400, detail="Broker connection is no longer active")
+
+    if order.asset_type == "option":
+        order = await opt_exec.approve_staged_order(db, conn, order)
+    else:
+        order = await exec_svc.approve_staged_equity_order(db, conn, order)
+
+    await audit_log(
+        db, action="ORDER_APPROVED", outcome="success" if order.status in ("submitted", "filled") else "blocked",
+        user_id=current_user.id, resource_type="order", resource_id=order.id, request=request,
+        metadata={"ticker": order.ticker, "asset_type": order.asset_type, "status": order.status},
+    )
+    return order
+
+
+@router.post("/orders/{order_id}/reject", response_model=OrderResponse)
+async def reject_order(order_id: uuid.UUID, request: Request, current_user: CurrentUser, db: DB):
+    result = await db.execute(select(Order).where(Order.id == order_id, Order.user_id == current_user.id))
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.status != "pending_approval":
+        raise HTTPException(status_code=400, detail=f"Order is not pending approval (status={order.status})")
+
+    if order.asset_type == "option":
+        order.status = "cancelled"
+        order.cancelled_at = datetime.now(timezone.utc)
+        order.rejection_reason = "Rejected by user"
+        await db.flush()
+    else:
+        order = await exec_svc.reject_staged_equity_order(db, order)
+
+    await audit_log(
+        db, action="ORDER_REJECTED", outcome="success",
+        user_id=current_user.id, resource_type="order", resource_id=order.id, request=request,
+    )
+    return order
 
 
 @router.post("/orders/manual", response_model=OrderResponse, status_code=201)

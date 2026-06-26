@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import log as audit_log
-from app.models.automation import AutomationConfig, Order
+from app.models.automation import AutomationConfig, Order, UserStrategyConfig
 from app.models.broker import BrokerConnection
 from app.models.signal import Signal
 from app.services.broker_adapter import get_adapter
@@ -119,6 +119,7 @@ async def validate(
     conn: BrokerConnection,
     signal: Signal,
     ticker: str,
+    strategy_config: UserStrategyConfig | None = None,
 ) -> ValidationResult:
     # 0. Market regime filter — block counter-trend signals
     regime = (signal.indicators or {}).get("regime", "sideways") if signal.indicators else "sideways"
@@ -163,11 +164,18 @@ async def validate(
     if open_count >= config.max_open_positions:
         return ValidationResult(False, f"Max open positions ({config.max_open_positions}) reached")
 
-    # 5. Calculate position size from live account (already fetched above for PDT check)
-
-    position_size = equity * config.max_position_pct
+    # 5. Calculate position size from live account (already fetched above for PDT check).
+    # A strategy's own allocated capital drives sizing when present, but the
+    # account-wide max_position_pct stays an authoritative ceiling — a
+    # strategy can ask for less risk, never more than the account allows.
+    account_cap = equity * config.max_position_pct
     if config.max_position_size_usd:
-        position_size = min(position_size, config.max_position_size_usd)
+        account_cap = min(account_cap, config.max_position_size_usd)
+
+    if strategy_config is not None:
+        position_size = min(strategy_config.allocated_capital_usd, account_cap)
+    else:
+        position_size = account_cap
 
     if position_size < 1.0:
         return ValidationResult(False, "Position size below $1 minimum")
@@ -181,12 +189,17 @@ async def execute_signal(
     conn: BrokerConnection,
     signal: Signal,
     ticker: str,
+    strategy_config: UserStrategyConfig | None = None,
 ) -> Order:
     """
     Validate + place order for a signal.
     Always creates an Order record (approved or rejected) for audit trail.
+
+    A strategy in mode="manual" stages a pending_approval Order instead of
+    placing it immediately — same gate options automation already uses,
+    see approve_staged_equity_order() below for the other half.
     """
-    validation = await validate(db, config, conn, signal, ticker)
+    validation = await validate(db, config, conn, signal, ticker, strategy_config)
 
     if not validation.approved:
         order = Order(
@@ -233,6 +246,34 @@ async def execute_signal(
     else:
         take_profit = Decimal(str(round(entry_price * (1 - config.take_profit_pct), 2)))
         stop_loss = Decimal(str(round(entry_price * (1 + config.stop_loss_pct), 2)))
+
+    if strategy_config is not None and strategy_config.mode == "manual":
+        # Stage it — nothing is sent to the broker until a human approves
+        # via approve_staged_equity_order(). Bracket prices are computed
+        # now from today's entry_price so Approve can place immediately
+        # without re-deriving them (mirrors options automation staging).
+        order = Order(
+            user_id=config.user_id,
+            broker_connection_id=conn.id,
+            signal_id=signal.id,
+            ticker=ticker,
+            order_type="market",
+            side=side,
+            quantity=float(qty),
+            take_profit_price=float(take_profit),
+            stop_price=float(stop_loss),
+            status="pending_approval",
+            is_automated=True,
+        )
+        db.add(order)
+        await db.flush()
+        log.info("Strategy order staged for approval: %s %s qty=%s", side.upper(), ticker, qty)
+        await audit_log(
+            db, action="STRATEGY_ORDER_STAGED", outcome="success", actor_type="automation",
+            user_id=config.user_id, resource_type="order", resource_id=order.id,
+            metadata={"ticker": ticker, "side": side, "qty": str(qty), "signal_id": str(signal.id)},
+        )
+        return order
 
     try:
         adapter = get_adapter(conn.broker_name)
@@ -293,5 +334,70 @@ async def execute_signal(
             "signal_id": str(signal.id),
             "reason": order.rejection_reason,
         },
+    )
+    return order
+
+
+async def approve_staged_equity_order(db: AsyncSession, conn: BrokerConnection, order: Order) -> Order:
+    """
+    Places the real paper order for a strategy's pending_approval equity
+    Order, using the bracket prices already computed at staging time.
+    Mirrors options_execution.approve_staged_order's shape so the Orders
+    page can drive both asset types through one Approve button.
+    """
+    if order.status != "pending_approval":
+        raise ValueError(f"Order {order.id} is not pending approval (status={order.status})")
+
+    adapter = get_adapter(conn.broker_name)
+    try:
+        result = adapter.place_bracket_order(
+            conn=conn,
+            symbol=order.ticker,
+            qty=Decimal(str(order.quantity)),
+            side=order.side,
+            take_profit_price=Decimal(str(order.take_profit_price)),
+            stop_loss_price=Decimal(str(order.stop_price)),
+        )
+        order.broker_order_id = result["id"]
+        order.status = "submitted"
+        order.submitted_at = datetime.now(timezone.utc)
+
+        if hasattr(adapter, "get_orders"):
+            for o in adapter.get_orders(conn, status="all", limit=50):
+                if str(o.get("id")) == str(order.broker_order_id) and o.get("status") == "filled":
+                    order.status = "filled"
+                    order.filled_quantity = float(o.get("filled_qty") or order.quantity)
+                    order.avg_fill_price = float(o["filled_avg_price"]) if o.get("filled_avg_price") else None
+                    order.filled_at = datetime.now(timezone.utc)
+                    break
+    except Exception as exc:
+        order.status = "rejected"
+        order.rejection_reason = str(exc)
+        log.error("Staged order approval failed for %s: %s", order.ticker, exc)
+
+    await db.flush()
+    await audit_log(
+        db,
+        action="ORDER_PLACED" if order.status in ("submitted", "filled") else "ORDER_REJECTED",
+        outcome="success" if order.status in ("submitted", "filled") else "failure",
+        actor_type="user",
+        user_id=order.user_id,
+        resource_type="order",
+        resource_id=order.id,
+        metadata={"ticker": order.ticker, "side": order.side, "reason": order.rejection_reason},
+    )
+    return order
+
+
+async def reject_staged_equity_order(db: AsyncSession, order: Order) -> Order:
+    if order.status != "pending_approval":
+        raise ValueError(f"Order {order.id} is not pending approval (status={order.status})")
+    order.status = "cancelled"
+    order.cancelled_at = datetime.now(timezone.utc)
+    await db.flush()
+    await audit_log(
+        db, action="ORDER_REJECTED", outcome="success", actor_type="user",
+        user_id=order.user_id, resource_type="order", resource_id=order.id,
+        metadata={"ticker": order.ticker, "side": order.side},
     )
     return order

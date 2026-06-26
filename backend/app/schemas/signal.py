@@ -176,6 +176,10 @@ class OrderResponse(BaseModel):
     pnl_usd: float | None = None
     pnl_pct: float | None = None
 
+    # Which strategy's signal produced this order, if any — null for
+    # manually-placed orders and for automated orders predating strategies.
+    strategy_name: str | None = None
+
     model_config = {"from_attributes": True}
 
 
@@ -269,3 +273,62 @@ class ManualOptionOrderRequest(BaseModel):
         if v <= 0:
             raise ValueError("quantity must be positive")
         return v
+
+
+class StrategyResponse(BaseModel):
+    id: uuid.UUID
+    key: str
+    name: str
+    description: str
+    w_trend: float
+    w_momentum: float
+    w_pattern: float
+    allowed_regimes: list[str] | None
+    min_volume_ratio: float | None
+
+    # This user's config for this strategy — defaults when none saved yet.
+    is_enabled: bool
+    mode: str
+    allocated_capital_usd: float
+
+    # Real performance from this user's own closed orders, all-time.
+    # Never fabricated: null/zero until there's actual trade history.
+    total_trades: int
+    wins: int
+    win_rate: float | None = None
+    total_pnl_usd: float | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class StrategyConfigRequest(BaseModel):
+    broker_connection_id: uuid.UUID
+    is_enabled: bool = False
+    mode: str = "manual"
+    allocated_capital_usd: float = 1000.0
+
+    @field_validator("mode")
+    @classmethod
+    def valid_mode(cls, v: str) -> str:
+        v = v.lower().strip()
+        if v not in ("auto", "manual"):
+            raise ValueError("mode must be 'auto' or 'manual'")
+        return v
+
+    @field_validator("allocated_capital_usd")
+    @classmethod
+    def positive_capital(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("allocated_capital_usd must be positive")
+        return v
+
+
+class StrategyPerformanceResponse(BaseModel):
+    strategy_id: uuid.UUID
+    strategy_key: str
+    strategy_name: str
+    trades: int
+    wins: int
+    win_rate: float | None = None
+    total_pnl_usd: float | None = None
+    avg_pnl_pct: float | None = None

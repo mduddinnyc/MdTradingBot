@@ -12,7 +12,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 
 from app.database import AsyncSessionLocal
-from app.models.automation import AutomationConfig, OptionsAutomationConfig
+from app.models.automation import AutomationConfig, OptionsAutomationConfig, Strategy, UserStrategyConfig
 from app.models.broker import BrokerConnection
 from app.models.market import Symbol, Watchlist, WatchlistItem
 from app.services import execution as exec_svc
@@ -66,24 +66,45 @@ async def run_signal_cycle(timeframe: str = "1Hour") -> None:
                 )
                 items = result.all()
 
+                # Automation (account-wide safety rail) must be on before
+                # anything below fires — strategies only refine what
+                # happens within that gate, they never bypass it.
+                result = await db.execute(
+                    select(AutomationConfig).where(
+                        AutomationConfig.user_id == conn.user_id,
+                        AutomationConfig.broker_connection_id == conn.id,
+                        AutomationConfig.is_enabled == True,
+                    )
+                )
+                config = result.scalar_one_or_none()
+                if not config:
+                    continue
+
+                result = await db.execute(
+                    select(UserStrategyConfig, Strategy)
+                    .join(Strategy, UserStrategyConfig.strategy_id == Strategy.id)
+                    .where(
+                        UserStrategyConfig.user_id == conn.user_id,
+                        UserStrategyConfig.broker_connection_id == conn.id,
+                        UserStrategyConfig.is_enabled == True,
+                    )
+                )
+                enabled_strategies = result.all()
+
                 for item, sym in items:
                     ticker = sym.ticker
-                    signal = await signal_engine.generate_signal(db, ticker, timeframe)
-                    if not signal:
-                        continue
 
-                    # Check if this user has automation enabled
-                    result = await db.execute(
-                        select(AutomationConfig).where(
-                            AutomationConfig.user_id == conn.user_id,
-                            AutomationConfig.broker_connection_id == conn.id,
-                            AutomationConfig.is_enabled == True,
-                        )
-                    )
-                    config = result.scalar_one_or_none()
-
-                    if config and signal.signal_type in ("BUY", "SELL"):
-                        await exec_svc.execute_signal(db, config, conn, signal, ticker)
+                    if enabled_strategies:
+                        for usc, strat in enabled_strategies:
+                            signal = await signal_engine.generate_signal(db, ticker, timeframe, strategy=strat)
+                            if signal and signal.signal_type in ("BUY", "SELL"):
+                                await exec_svc.execute_signal(db, config, conn, signal, ticker, strategy_config=usc)
+                    else:
+                        # No strategies configured yet — today's exact
+                        # legacy behavior, unchanged.
+                        signal = await signal_engine.generate_signal(db, ticker, timeframe)
+                        if signal and signal.signal_type in ("BUY", "SELL"):
+                            await exec_svc.execute_signal(db, config, conn, signal, ticker)
 
             await db.commit()
             log.info("Signal cycle complete — timeframe=%s", timeframe)

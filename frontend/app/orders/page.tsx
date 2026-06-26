@@ -51,7 +51,7 @@ type OrdersTableMeta = {
 
 const DEFAULT_ORDER = [
   "ticker", "type", "side", "quantity", "entry", "exit", "pnl_usd", "pnl_pct",
-  "stop", "target", "status", "action", "auto", "reason", "time",
+  "stop", "target", "status", "action", "auto", "strategy", "reason", "time",
 ];
 const DEFAULT_VISIBILITY: VisibilityState = {};
 
@@ -89,7 +89,7 @@ function TypeBadge({ order }: { order: any }) {
 }
 
 function exportCsv(rows: any[]) {
-  const headers = ["Ticker", "Type", "Side", "Qty", "Entry", "Exit", "PnL_USD", "PnL_Pct", "Status", "Auto", "OpenedAt", "ClosedAt"];
+  const headers = ["Ticker", "Type", "Side", "Qty", "Entry", "Exit", "PnL_USD", "PnL_Pct", "Status", "Auto", "Strategy", "OpenedAt", "ClosedAt"];
   const lines = [headers.join(",")];
   for (const o of rows) {
     lines.push([
@@ -103,6 +103,7 @@ function exportCsv(rows: any[]) {
       o.pnl_pct != null ? (o.pnl_pct * 100).toFixed(2) : "",
       o.status,
       o.is_automated ? "auto" : "manual",
+      o.strategy_name ?? "",
       new Date(o.created_at).toISOString(),
       o.closed_at ? new Date(o.closed_at).toISOString() : "",
     ].join(","));
@@ -119,7 +120,7 @@ function exportCsv(rows: any[]) {
 const COLUMN_LABELS: Record<string, string> = {
   ticker: "Ticker", type: "Type", side: "Side", quantity: "Qty", entry: "Entry", exit: "Exit",
   pnl_usd: "P&L $", pnl_pct: "P&L %", stop: "Stop", target: "Target", status: "Status",
-  action: "Action", auto: "Auto", reason: "Reason", time: "Time",
+  action: "Action", auto: "Auto", strategy: "Strategy", reason: "Reason", time: "Time",
 };
 
 const baseColumns: ColumnDef<any>[] = [
@@ -218,6 +219,12 @@ const baseColumns: ColumnDef<any>[] = [
     cell: (c) => <span className="text-xs">{c.row.original.is_automated ? "🤖" : "Manual"}</span>,
   },
   {
+    id: "strategy", header: "Strategy", accessorKey: "strategy_name", size: 130,
+    cell: (c) => (
+      <span className="text-xs text-gray-300">{c.row.original.strategy_name || "—"}</span>
+    ),
+  },
+  {
     id: "reason", header: "Reason", accessorKey: "rejection_reason", size: 220,
     cell: (c) => {
       const reason = c.row.original.rejection_reason;
@@ -264,11 +271,11 @@ export default function OrdersPage() {
   });
 
   const approveMut = useMutation({
-    mutationFn: (id: string) => signalApi.approveOptionOrder(id),
+    mutationFn: (id: string) => signalApi.approveOrder(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });
   const rejectMut = useMutation({
-    mutationFn: (id: string) => signalApi.rejectOptionOrder(id),
+    mutationFn: (id: string) => signalApi.rejectOrder(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });
   const busyPending = approveMut.isPending || rejectMut.isPending;

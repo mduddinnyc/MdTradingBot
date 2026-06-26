@@ -17,6 +17,7 @@ import ta as _ta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.automation import Strategy
 from app.models.market import Candle, Symbol
 from app.models.signal import Signal
 
@@ -407,7 +408,15 @@ def find_support_resistance(df: pd.DataFrame, lookback: int = 50, n_levels: int 
 
 # ── Signal fusion ──────────────────────────────────────────────
 
-def fuse(ind: IndicatorResult, pattern: PatternResult, close: float, levels: dict | None = None) -> FusionResult:
+def fuse(
+    ind: IndicatorResult,
+    pattern: PatternResult,
+    close: float,
+    levels: dict | None = None,
+    w_trend: float = W_TREND,
+    w_momentum: float = W_MOMENTUM,
+    w_pattern: float = W_PATTERN,
+) -> FusionResult:
     ts = trend_score(ind)
     ms = momentum_score(ind)
 
@@ -418,8 +427,9 @@ def fuse(ind: IndicatorResult, pattern: PatternResult, close: float, levels: dic
     elif pattern.direction == "bearish":
         ps = -pattern.confidence
 
-    # Weighted sum → raw score in [-1, 1]
-    raw = W_TREND * ts + W_MOMENTUM * ms + W_PATTERN * ps
+    # Weighted sum → raw score in [-1, 1]. Defaults reproduce the original
+    # fixed weighting; a Strategy passes its own combination instead.
+    raw = w_trend * ts + w_momentum * ms + w_pattern * ps
     raw = float(np.clip(raw, -1, 1))
     confidence = abs(raw)
 
@@ -506,11 +516,18 @@ async def generate_signal(
     db: AsyncSession,
     ticker: str,
     timeframe: str = "1Hour",
+    strategy: Strategy | None = None,
 ) -> Signal | None:
     """
     Pull stored candles, run indicator + pattern + fusion,
     persist the Signal record, and return it.
-    Returns None if not enough data.
+    Returns None if not enough data, or if a strategy's regime/volume
+    gate isn't met (nothing to act on, not an error).
+
+    `strategy=None` reproduces the original fixed-weight behavior exactly
+    (the "Balanced" strategy's own weights happen to match those module
+    constants) — existing callers and any Signal with strategy_id=None
+    are unaffected by this becoming strategy-aware.
     """
     result = await db.execute(select(Symbol).where(Symbol.ticker == ticker))
     symbol = result.scalar_one_or_none()
@@ -539,14 +556,25 @@ async def generate_signal(
     ind = compute_indicators(df)
     pattern = detect_pattern(df)
     regime = detect_regime(df, ind)
+
+    if strategy is not None:
+        if strategy.allowed_regimes and regime not in strategy.allowed_regimes:
+            log.info("%s/%s: regime %s not in %s, skipping", strategy.key, ticker, regime, strategy.allowed_regimes)
+            return None
+        if strategy.min_volume_ratio and ind.volume_ratio < strategy.min_volume_ratio:
+            log.info("%s/%s: volume_ratio %.2f < %.2f, skipping", strategy.key, ticker, ind.volume_ratio, strategy.min_volume_ratio)
+            return None
+
     sr = find_support_resistance(df)
     levels = {"pivot": compute_pivot_points(df), **sr}
-    result_fusion = fuse(ind, pattern, close=float(df["close"].iloc[-1]), levels=levels)
+    weights = dict(w_trend=strategy.w_trend, w_momentum=strategy.w_momentum, w_pattern=strategy.w_pattern) if strategy else {}
+    result_fusion = fuse(ind, pattern, close=float(df["close"].iloc[-1]), levels=levels, **weights)
 
     expires = datetime.now(timezone.utc) + timedelta(hours=4 if timeframe == "1Hour" else 24)
 
     signal = Signal(
         symbol_id=symbol.id,
+        strategy_id=strategy.id if strategy else None,
         signal_type=result_fusion.signal_type,
         confidence=result_fusion.confidence,
         timeframe=timeframe,
@@ -555,7 +583,7 @@ async def generate_signal(
         stop_price=result_fusion.stop_price,
         pattern_detected=result_fusion.pattern.name,
         indicators={**result_fusion.indicators, "regime": regime},
-        reasoning=result_fusion.reasoning + f" | Regime={regime}",
+        reasoning=(f"[{strategy.name}] " if strategy else "") + result_fusion.reasoning + f" | Regime={regime}",
         model_version=MODEL_VERSION,
         expires_at=expires,
     )
@@ -563,8 +591,9 @@ async def generate_signal(
     await db.flush()
 
     log.info(
-        "Signal %s %s confidence=%.2f pattern=%s",
-        result_fusion.signal_type, ticker, result_fusion.confidence, result_fusion.pattern.name
+        "Signal %s %s confidence=%.2f pattern=%s strategy=%s",
+        result_fusion.signal_type, ticker, result_fusion.confidence, result_fusion.pattern.name,
+        strategy.key if strategy else "default",
     )
     return signal
 

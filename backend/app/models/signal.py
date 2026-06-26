@@ -14,6 +14,7 @@ class Signal(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     symbol_id: Mapped[int] = mapped_column(Integer, ForeignKey("symbols.id"), nullable=False)
+    strategy_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("strategies.id"))  # null = legacy default-weighted signal
     signal_type: Mapped[str] = mapped_column(String(10), nullable=False)   # BUY SELL HOLD
     confidence: Mapped[float] = mapped_column(Float, nullable=False)        # 0.0 – 1.0
     timeframe: Mapped[str] = mapped_column(String(10), nullable=False)

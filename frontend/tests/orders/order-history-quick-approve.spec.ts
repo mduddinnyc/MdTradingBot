@@ -1,8 +1,9 @@
 import { test, expect, Page, Route } from "@playwright/test";
 
-// Order History's Action column reuses the same approve/reject endpoints
-// as the Automation page's Pending Approval card — every call is mocked
-// here, only auth runs against the real backend.
+// Order History's Action column calls the unified /signals/orders/{id}/
+// approve|reject endpoints (asset_type-aware on the backend, dispatching
+// to options or equity execution) — every call is mocked here, only auth
+// runs against the real backend.
 
 function uniqueEmail(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1e6)}@example.com`;
@@ -68,9 +69,9 @@ test.describe("Order History quick approve", () => {
       return fulfillJson(route, [approved ? filled : pending]);
     });
     const approvePromise = page.waitForRequest(
-      (req) => req.url().includes("/signals/options-automation/order-mock-1/approve") && req.method() === "POST"
+      (req) => req.url().includes("/signals/orders/order-mock-1/approve") && req.method() === "POST"
     );
-    await page.route("**/api/v1/signals/options-automation/order-mock-1/approve", (route) => {
+    await page.route("**/api/v1/signals/orders/order-mock-1/approve", (route) => {
       approved = true;
       return fulfillJson(route, order({ id: "order-mock-1", status: "filled" }));
     });
@@ -88,9 +89,9 @@ test.describe("Order History quick approve", () => {
   test("positive: Reject button calls reject", async ({ page }) => {
     await page.route("**/api/v1/signals/orders**", (route) => fulfillJson(route, [order({})]));
     const rejectPromise = page.waitForRequest(
-      (req) => req.url().includes("/signals/options-automation/order-mock-1/reject") && req.method() === "POST"
+      (req) => req.url().includes("/signals/orders/order-mock-1/reject") && req.method() === "POST"
     );
-    await page.route("**/api/v1/signals/options-automation/order-mock-1/reject", (route) =>
+    await page.route("**/api/v1/signals/orders/order-mock-1/reject", (route) =>
       fulfillJson(route, order({ status: "cancelled", rejection_reason: "Rejected by user" }))
     );
 
