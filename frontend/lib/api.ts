@@ -147,6 +147,8 @@ export const signalApi = {
 
   automationList: () => api.get("/signals/automation").then((r) => r.data),
 
+  automationStatus: () => api.get("/signals/automation/status").then((r) => r.data),
+
   automationCreate: (body: object) => api.post("/signals/automation", body).then((r) => r.data),
 
   automationUpdate: (id: string, body: object) =>

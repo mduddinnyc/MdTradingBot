@@ -225,11 +225,13 @@ def start_scheduler() -> None:
         max_instances=1,
     )
 
-    # Hourly candle + signal run
+    # Hourly candle + signal run (market days only)
     scheduler.add_job(
         run_signal_cycle,
         trigger="cron",
         minute=5,               # 5 min past each hour to let candle fully close
+        day_of_week="mon-fri",
+        timezone="America/New_York",
         args=["1Hour"],
         id="hourly_signals",
         replace_existing=True,

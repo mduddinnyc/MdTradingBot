@@ -24,17 +24,17 @@ const PRESETS: Record<
 > = {
   conservative: {
     label: "Conservative", icon: Shield, blurb: "Fewer, higher-conviction trades. Tightest loss limits.",
-    min_confidence: 0.75, max_position_pct: 0.05, stop_loss_pct: 0.015, take_profit_pct: 0.03,
+    min_confidence: 0.55, max_position_pct: 0.05, stop_loss_pct: 0.015, take_profit_pct: 0.03,
     max_open_positions: 3, cooldown_minutes: 90, daily_loss_pct: 0.02,
   },
   balanced: {
-    label: "Balanced", icon: TrendingUp, blurb: "Today's recommended defaults. Moderate risk and frequency.",
-    min_confidence: 0.60, max_position_pct: 0.10, stop_loss_pct: 0.02, take_profit_pct: 0.04,
+    label: "Balanced", icon: TrendingUp, blurb: "Moderate risk and frequency. Fires on most medium-strength signals.",
+    min_confidence: 0.35, max_position_pct: 0.10, stop_loss_pct: 0.02, take_profit_pct: 0.04,
     max_open_positions: 5, cooldown_minutes: 60, daily_loss_pct: 0.03,
   },
   aggressive: {
-    label: "Aggressive", icon: Zap, blurb: "More trades, bigger size, widest stops. Highest risk.",
-    min_confidence: 0.55, max_position_pct: 0.15, stop_loss_pct: 0.03, take_profit_pct: 0.06,
+    label: "Aggressive", icon: Zap, blurb: "More trades, bigger size, widest stops. Fires on nearly all signals.",
+    min_confidence: 0.20, max_position_pct: 0.15, stop_loss_pct: 0.03, take_profit_pct: 0.06,
     max_open_positions: 8, cooldown_minutes: 30, daily_loss_pct: 0.05,
   },
 };

@@ -392,18 +392,21 @@ async def refresh_signal(ticker: str, current_user: CurrentUser, db: DB):
 # max_daily_loss_usd is mandatory here (computed below, % of live equity)
 # even though it stays nullable on the column for the manual form.
 RISK_PROFILE_PRESETS = {
+    # Signal engine produces confidence 0.10–0.70 in practice (weighted indicator
+    # fusion, abs of raw score). Typical strong BUY/SELL: 0.25–0.55. Old presets
+    # (0.75/0.60/0.55) blocked virtually every real signal — corrected here.
     "conservative": {
-        "min_confidence": 0.75, "max_position_pct": 0.05,
+        "min_confidence": 0.55, "max_position_pct": 0.05,
         "stop_loss_pct": 0.015, "take_profit_pct": 0.03,
         "max_open_positions": 3, "cooldown_minutes": 90, "daily_loss_pct": 0.02,
     },
     "balanced": {
-        "min_confidence": 0.60, "max_position_pct": 0.10,
+        "min_confidence": 0.35, "max_position_pct": 0.10,
         "stop_loss_pct": 0.02, "take_profit_pct": 0.04,
         "max_open_positions": 5, "cooldown_minutes": 60, "daily_loss_pct": 0.03,
     },
     "aggressive": {
-        "min_confidence": 0.55, "max_position_pct": 0.15,
+        "min_confidence": 0.20, "max_position_pct": 0.15,
         "stop_loss_pct": 0.03, "take_profit_pct": 0.06,
         "max_open_positions": 8, "cooldown_minutes": 30, "daily_loss_pct": 0.05,
     },
@@ -1317,6 +1320,70 @@ async def pdt_status(current_user: CurrentUser, db: DB):
         except Exception:
             pass
     return statuses
+
+
+# ── Automation diagnostic status ───────────────────────────────
+
+@router.get("/automation/status")
+async def get_automation_status(current_user: CurrentUser, db: DB):
+    """
+    Diagnostic: tells the UI exactly why automation is or isn't trading.
+    Returns config state, today's order counts by status, and the top
+    rejection reasons so users can self-diagnose without guessing.
+    """
+    result = await db.execute(
+        select(AutomationConfig).where(AutomationConfig.user_id == current_user.id)
+    )
+    config = result.scalars().first()
+
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    result = await db.execute(
+        select(Order).where(
+            Order.user_id == current_user.id,
+            Order.is_automated == True,
+            Order.created_at >= today_start,
+        ).order_by(Order.created_at.desc()).limit(100)
+    )
+    today_orders = result.scalars().all()
+
+    by_status: dict[str, int] = {}
+    for o in today_orders:
+        by_status[o.status] = by_status.get(o.status, 0) + 1
+
+    reason_counts: dict[str, int] = {}
+    for o in today_orders:
+        if o.status == "rejected" and o.rejection_reason:
+            reason_counts[o.rejection_reason] = reason_counts.get(o.rejection_reason, 0) + 1
+
+    top_reasons = sorted(reason_counts.items(), key=lambda x: -x[1])[:5]
+
+    return {
+        "config": {
+            "is_enabled": config.is_enabled if config else False,
+            "min_confidence": config.min_confidence if config else None,
+            "max_daily_loss_usd": config.max_daily_loss_usd if config else None,
+            "max_open_positions": config.max_open_positions if config else None,
+            "cooldown_minutes": config.cooldown_minutes if config else None,
+        },
+        "today": {
+            "submitted": by_status.get("submitted", 0),
+            "filled": by_status.get("filled", 0),
+            "rejected": by_status.get("rejected", 0),
+            "pending_approval": by_status.get("pending_approval", 0),
+            "total": len(today_orders),
+        },
+        "top_rejection_reasons": [{"reason": r, "count": c} for r, c in top_reasons],
+        "recent_activity": [
+            {
+                "ticker": o.ticker,
+                "side": o.side,
+                "status": o.status,
+                "rejection_reason": o.rejection_reason,
+                "created_at": o.created_at.isoformat(),
+            }
+            for o in today_orders[:10]
+        ],
+    }
 
 
 # ── Emergency stop ─────────────────────────────────────────────

@@ -10,6 +10,7 @@ import { fmtPct } from "@/lib/utils";
 import OptionsAutomationPanel from "@/components/OptionsAutomationPanel";
 import RiskProfileWizard from "@/components/RiskProfileWizard";
 import StrategiesPanel from "@/components/StrategiesPanel";
+import AutomationDiagnosticPanel from "@/components/AutomationDiagnosticPanel";
 
 const schema = z.object({
   broker_connection_id: z.string().uuid(),
@@ -243,9 +244,11 @@ export default function AutomationPage() {
               <label className="label">Min Confidence (%)</label>
               <input className="input" type="number" step="1" min="10" max="100"
                 {...register("min_confidence", { setValueAs: (v) => Number(v) / 100 })}
-                defaultValue={60}
+                defaultValue={35}
               />
-              <p className="text-xs text-gray-500 mt-1">Only act on signals above this threshold</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Signal scores: 10%–70% typical, median ~25–35%. Set lower to trade more; higher for fewer, stronger-conviction trades.
+              </p>
               {errors.min_confidence && <p className="text-xs text-sell mt-1">{errors.min_confidence.message}</p>}
             </div>
             <div>
@@ -328,6 +331,8 @@ export default function AutomationPage() {
         </button>
       </form>
       )}
+
+      <AutomationDiagnosticPanel />
 
       <StrategiesPanel />
 
