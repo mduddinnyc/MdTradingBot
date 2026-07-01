@@ -975,6 +975,7 @@ async def get_strategies(current_user: CurrentUser, db: DB):
             is_enabled=cfg.is_enabled if cfg else False,
             mode=cfg.mode if cfg else "manual",
             allocated_capital_usd=cfg.allocated_capital_usd if cfg else 1000.0,
+            expires_at=cfg.expires_at if cfg else None,
             total_trades=len(closed_pnls),
             wins=sum(1 for p in closed_pnls if p > 0),
             win_rate=(sum(1 for p in closed_pnls if p > 0) / len(closed_pnls)) if closed_pnls else None,
@@ -1013,10 +1014,12 @@ async def update_strategy_config(strategy_id: uuid.UUID, body: StrategyConfigReq
         cfg.is_enabled = body.is_enabled
         cfg.mode = body.mode
         cfg.allocated_capital_usd = body.allocated_capital_usd
+        cfg.expires_at = body.expires_at
     else:
         cfg = UserStrategyConfig(
             user_id=current_user.id, broker_connection_id=conn.id, strategy_id=strategy_id,
             is_enabled=body.is_enabled, mode=body.mode, allocated_capital_usd=body.allocated_capital_usd,
+            expires_at=body.expires_at,
         )
         db.add(cfg)
     await db.flush()
@@ -1024,7 +1027,8 @@ async def update_strategy_config(strategy_id: uuid.UUID, body: StrategyConfigReq
     await audit_log(
         db, action="STRATEGY_CONFIG_UPDATED", outcome="success",
         user_id=current_user.id, resource_type="strategy", resource_id=strategy_id, request=request,
-        metadata={"key": strat.key, "is_enabled": body.is_enabled, "mode": body.mode, "allocated_capital_usd": body.allocated_capital_usd},
+        metadata={"key": strat.key, "is_enabled": body.is_enabled, "mode": body.mode,
+                  "allocated_capital_usd": body.allocated_capital_usd, "expires_at": str(body.expires_at)},
     )
 
     return StrategyResponse(
@@ -1032,6 +1036,7 @@ async def update_strategy_config(strategy_id: uuid.UUID, body: StrategyConfigReq
         w_trend=strat.w_trend, w_momentum=strat.w_momentum, w_pattern=strat.w_pattern,
         allowed_regimes=strat.allowed_regimes, min_volume_ratio=strat.min_volume_ratio,
         is_enabled=cfg.is_enabled, mode=cfg.mode, allocated_capital_usd=cfg.allocated_capital_usd,
+        expires_at=cfg.expires_at,
         total_trades=0, wins=0, win_rate=None, total_pnl_usd=None,
     )
 
@@ -1359,6 +1364,8 @@ async def get_automation_status(current_user: CurrentUser, db: DB):
 
     return {
         "config": {
+            "id": str(config.id) if config else None,
+            "broker_connection_id": str(config.broker_connection_id) if config else None,
             "is_enabled": config.is_enabled if config else False,
             "min_confidence": config.min_confidence if config else None,
             "max_daily_loss_usd": config.max_daily_loss_usd if config else None,

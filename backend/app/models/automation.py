@@ -113,6 +113,7 @@ class UserStrategyConfig(Base):
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     mode: Mapped[str] = mapped_column(String(10), nullable=False, default="manual")  # "auto" | "manual"
     allocated_capital_usd: Mapped[float] = mapped_column(Float, nullable=False, default=1000.0)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # null = run forever
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

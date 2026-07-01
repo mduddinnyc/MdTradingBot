@@ -290,6 +290,7 @@ class StrategyResponse(BaseModel):
     is_enabled: bool
     mode: str
     allocated_capital_usd: float
+    expires_at: datetime | None = None
 
     # Real performance from this user's own closed orders, all-time.
     # Never fabricated: null/zero until there's actual trade history.
@@ -306,6 +307,7 @@ class StrategyConfigRequest(BaseModel):
     is_enabled: bool = False
     mode: str = "manual"
     allocated_capital_usd: float = 1000.0
+    expires_at: datetime | None = None
 
     @field_validator("mode")
     @classmethod

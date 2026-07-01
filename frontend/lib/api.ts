@@ -170,7 +170,7 @@ export const signalApi = {
 
   updateStrategyConfig: (
     strategyId: string,
-    body: { broker_connection_id: string; is_enabled: boolean; mode: "auto" | "manual"; allocated_capital_usd: number }
+    body: { broker_connection_id: string; is_enabled: boolean; mode: "auto" | "manual"; allocated_capital_usd: number; expires_at?: string | null }
   ) => api.put(`/signals/strategies/${strategyId}/config`, body).then((r) => r.data),
 
   strategyPerformance: (period: "today" | "7d" | "30d" | "1y" | "all" = "7d") =>

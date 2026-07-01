@@ -96,6 +96,11 @@ async def run_signal_cycle(timeframe: str = "1Hour") -> None:
 
                     if enabled_strategies:
                         for usc, strat in enabled_strategies:
+                            # Auto-disable strategies whose duration has elapsed
+                            if usc.expires_at and datetime.now(timezone.utc) > usc.expires_at:
+                                log.info("Strategy %s expired at %s — auto-disabling", strat.key, usc.expires_at)
+                                usc.is_enabled = False
+                                continue
                             signal = await signal_engine.generate_signal(db, ticker, timeframe, strategy=strat)
                             if signal and signal.signal_type in ("BUY", "SELL"):
                                 await exec_svc.execute_signal(db, config, conn, signal, ticker, strategy_config=usc)

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { brokerApi, signalApi } from "@/lib/api";
 import { fmtUsd, fmtPct, cn } from "@/lib/utils";
-import { Layers, TrendingUp } from "lucide-react";
+import { Layers, TrendingUp, Clock } from "lucide-react";
 
 const PERIODS = [
   { key: "today", label: "Today" },
@@ -14,26 +14,89 @@ const PERIODS = [
 ] as const;
 type Period = (typeof PERIODS)[number]["key"];
 
+// Duration options for how long a strategy runs before auto-disabling.
+// null = forever (never expires).
+const DURATION_OPTIONS = [
+  { label: "Forever", value: null },
+  { label: "Today only", value: "today" },
+  { label: "1 Week", value: "1w" },
+  { label: "1 Month", value: "1m" },
+  { label: "6 Months", value: "6m" },
+  { label: "1 Year", value: "1y" },
+] as const;
+type DurationValue = (typeof DURATION_OPTIONS)[number]["value"];
+
+function computeExpiresAt(value: DurationValue): string | null {
+  if (value === null) return null;
+  const now = new Date();
+  if (value === "today") {
+    // End of today in UTC
+    const end = new Date(now);
+    end.setUTCHours(23, 59, 59, 999);
+    return end.toISOString();
+  }
+  const daysMap: Record<string, number> = { "1w": 7, "1m": 30, "6m": 180, "1y": 365 };
+  const days = daysMap[value];
+  return new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function durationValueFromExpiresAt(expiresAt: string | null): DurationValue {
+  if (!expiresAt) return null;
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  if (diff <= 0) return null; // expired — treat as no selection
+  const days = diff / (1000 * 60 * 60 * 24);
+  if (days <= 1) return "today";
+  if (days <= 8) return "1w";
+  if (days <= 35) return "1m";
+  if (days <= 185) return "6m";
+  return "1y";
+}
+
+function formatRemaining(expiresAt: string | null): string | null {
+  if (!expiresAt) return null;
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  if (diff <= 0) return "Expired";
+  const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+  if (days === 1) return "Expires today";
+  if (days < 8) return `${days}d left`;
+  if (days < 35) return `${Math.ceil(days / 7)}w left`;
+  if (days < 185) return `${Math.ceil(days / 30)}mo left`;
+  return `${Math.ceil(days / 365)}y left`;
+}
+
 function StrategyCard({ strategy, connId }: { strategy: any; connId: string }) {
   const qc = useQueryClient();
   const [isEnabled, setIsEnabled] = useState(strategy.is_enabled);
   const [mode, setMode] = useState<"auto" | "manual">(strategy.mode);
   const [capital, setCapital] = useState(String(strategy.allocated_capital_usd));
+  const [duration, setDuration] = useState<DurationValue>(
+    durationValueFromExpiresAt(strategy.expires_at ?? null)
+  );
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     setIsEnabled(strategy.is_enabled);
     setMode(strategy.mode);
     setCapital(String(strategy.allocated_capital_usd));
-  }, [strategy.is_enabled, strategy.mode, strategy.allocated_capital_usd]);
+    setDuration(durationValueFromExpiresAt(strategy.expires_at ?? null));
+  }, [strategy.is_enabled, strategy.mode, strategy.allocated_capital_usd, strategy.expires_at]);
+
+  const isExpired = strategy.expires_at && new Date(strategy.expires_at).getTime() < Date.now();
+  const remaining = formatRemaining(strategy.expires_at ?? null);
 
   const mut = useMutation({
-    mutationFn: (overrides: Partial<{ is_enabled: boolean; mode: "auto" | "manual"; allocated_capital_usd: number }>) =>
+    mutationFn: (overrides: Partial<{
+      is_enabled: boolean;
+      mode: "auto" | "manual";
+      allocated_capital_usd: number;
+      expires_at: string | null;
+    }>) =>
       signalApi.updateStrategyConfig(strategy.id, {
         broker_connection_id: connId,
         is_enabled: isEnabled,
         mode,
         allocated_capital_usd: parseFloat(capital) || 0,
+        expires_at: computeExpiresAt(duration),
         ...overrides,
       }),
     onSuccess: () => {
@@ -46,12 +109,27 @@ function StrategyCard({ strategy, connId }: { strategy: any; connId: string }) {
   const hasEnoughHistory = strategy.total_trades >= 3;
 
   return (
-    <div className={cn("rounded-lg border p-4 space-y-3", isEnabled ? "border-brand/40 bg-brand/5" : "border-gray-800")}>
+    <div className={cn(
+      "rounded-lg border p-4 space-y-3 transition-colors",
+      isExpired ? "border-gray-700 bg-gray-900/50 opacity-60"
+        : isEnabled ? "border-brand/40 bg-brand/5"
+        : "border-gray-800"
+    )}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-semibold flex items-center gap-2">
             {strategy.name}
-            {isEnabled && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand/20 text-brand">ACTIVE</span>}
+            {isEnabled && !isExpired && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand/20 text-brand">ACTIVE</span>
+            )}
+            {isExpired && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-700 text-gray-400">EXPIRED</span>
+            )}
+            {remaining && !isExpired && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-hold/10 text-hold flex items-center gap-1">
+                <Clock size={9} />{remaining}
+              </span>
+            )}
           </p>
           <p className="text-xs text-gray-400 mt-0.5 max-w-md">{strategy.description}</p>
         </div>
@@ -91,26 +169,35 @@ function StrategyCard({ strategy, connId }: { strategy: any; connId: string }) {
         )}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 items-end">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+        {/* Execution mode */}
         <div>
           <label className="label">Mode</label>
           <div className="grid grid-cols-2 gap-1.5">
             <button
               type="button"
               onClick={() => { setMode("auto"); mut.mutate({ mode: "auto" }); }}
-              className={cn("py-1.5 rounded text-xs font-semibold transition-colors", mode === "auto" ? "bg-buy text-white" : "bg-gray-800 text-gray-400")}
+              className={cn(
+                "py-1.5 rounded text-xs font-semibold transition-colors",
+                mode === "auto" ? "bg-buy text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+              )}
             >
               Autopilot
             </button>
             <button
               type="button"
               onClick={() => { setMode("manual"); mut.mutate({ mode: "manual" }); }}
-              className={cn("py-1.5 rounded text-xs font-semibold transition-colors", mode === "manual" ? "bg-hold text-white" : "bg-gray-800 text-gray-400")}
+              className={cn(
+                "py-1.5 rounded text-xs font-semibold transition-colors",
+                mode === "manual" ? "bg-hold text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+              )}
             >
               Manual
             </button>
           </div>
         </div>
+
+        {/* Capital */}
         <div>
           <label htmlFor={`capital-${strategy.id}`} className="label">Capital ($)</label>
           <input
@@ -124,12 +211,37 @@ function StrategyCard({ strategy, connId }: { strategy: any; connId: string }) {
             onBlur={() => mut.mutate({})}
           />
         </div>
+
+        {/* Duration */}
+        <div>
+          <label htmlFor={`duration-${strategy.id}`} className="label">Run for</label>
+          <select
+            id={`duration-${strategy.id}`}
+            className="input"
+            value={duration ?? ""}
+            onChange={(e) => {
+              const raw = e.target.value || null;
+              const val = raw as DurationValue;
+              setDuration(val);
+              mut.mutate({ expires_at: computeExpiresAt(val) });
+            }}
+          >
+            {DURATION_OPTIONS.map((opt) => (
+              <option key={String(opt.value)} value={opt.value ?? ""}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Mode hint */}
         <p className="text-xs text-gray-500">
           {mode === "auto"
-            ? "Places real paper orders immediately when this strategy signals."
-            : "Stages orders here for you to Approve from the Orders page."}
+            ? "Places paper orders immediately. Manual mode always overrides — your approve/reject takes priority."
+            : "Stages orders for your review on the Orders page. Manual always overrides autopilot."}
         </p>
       </div>
+
       {saved && <p className="text-buy text-xs">Saved.</p>}
     </div>
   );
@@ -213,9 +325,8 @@ export default function StrategiesPanel() {
           <Layers size={16} className="text-hold" /> Strategies
         </h2>
         <p className="text-xs text-gray-400">
-          Each strategy is a different combination of the same indicators — pick how much capital it gets and whether
-          it trades automatically (Autopilot) or waits for your Approve (Manual). All of this still sits behind the
-          Automation switch and guardrails above.
+          Each strategy runs a different weighting of the same indicators.
+          Set the execution mode and how long it should run. <strong className="text-gray-300">Manual always overrides Autopilot</strong> — your approve/reject on the Orders page takes final priority.
         </p>
       </div>
 
