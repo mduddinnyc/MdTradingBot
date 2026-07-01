@@ -12,12 +12,13 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 
 from app.database import AsyncSessionLocal
-from app.models.automation import AutomationConfig, OptionsAutomationConfig, Strategy, UserStrategyConfig
+from app.models.automation import AutomationConfig, OptionsAutomationConfig, Order, Strategy, UserStrategyConfig
 from app.models.broker import BrokerConnection
 from app.models.market import Symbol, Watchlist, WatchlistItem
 from app.services import execution as exec_svc
 from app.services import market_data as md_svc
 from app.services import signal_engine
+from app.services.broker_adapter import get_adapter
 
 log = logging.getLogger(__name__)
 
@@ -197,6 +198,55 @@ async def run_options_automation_scan() -> None:
             log.error("Options automation scan failed: %s", exc, exc_info=True)
 
 
+async def cleanup_stale_orders() -> None:
+    """
+    Cancel orders stuck in 'submitted' or 'pending' for more than 1 hour.
+    Attempts a broker-side cancel first; falls back to DB-only cancel if the
+    broker returns a 404 (order already gone on their side).
+    Prevents stale orders from consuming position slots indefinitely.
+    """
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await db.execute(
+                select(Order, BrokerConnection)
+                .join(BrokerConnection, Order.broker_connection_id == BrokerConnection.id)
+                .where(
+                    Order.status.in_(["submitted", "pending"]),
+                    Order.submitted_at < stale_cutoff,
+                )
+            )
+            stale = result.all()
+            if not stale:
+                return
+
+            log.info("Stale order cleanup: found %d stuck order(s)", len(stale))
+            adapter_cache: dict = {}
+
+            for order, conn in stale:
+                try:
+                    if conn.id not in adapter_cache:
+                        adapter_cache[conn.id] = get_adapter(conn.broker_name)
+                    adapter = adapter_cache[conn.id]
+                    if order.broker_order_id:
+                        adapter.cancel_order(conn, order.broker_order_id)
+                except Exception as broker_err:
+                    log.warning(
+                        "Stale order %s — broker cancel failed (%s), marking cancelled anyway",
+                        order.id, broker_err,
+                    )
+
+                order.status = "cancelled"
+                order.cancelled_at = datetime.now(timezone.utc)
+                log.info("Stale order cancelled: %s %s %s (stuck since %s)", order.ticker, order.side, order.id, order.submitted_at)
+
+            await db.commit()
+        except Exception as exc:
+            await db.rollback()
+            log.error("Stale order cleanup failed: %s", exc, exc_info=True)
+
+
 def start_scheduler() -> None:
     # 5-minute intraday signals (day trading) — 9am-3:59pm ET covers the
     # 9:30-16:00 ET session with margin on both ends. Must pin timezone
@@ -291,6 +341,17 @@ def start_scheduler() -> None:
         day_of_week="mon-fri",
         timezone="America/New_York",
         id="options_automation_scan",
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    # Stale order cleanup — runs every 30 min all day to catch orders stuck
+    # in 'submitted'/'pending' > 1 hour, freeing position slots.
+    scheduler.add_job(
+        cleanup_stale_orders,
+        trigger="cron",
+        minute="*/30",
+        id="stale_order_cleanup",
         replace_existing=True,
         max_instances=1,
     )
