@@ -108,6 +108,7 @@ async def _last_signal_time(db: AsyncSession, user_id: uuid.UUID, ticker: str, s
             Order.ticker == ticker,
             Order.side == ("buy" if signal_type == "BUY" else "sell"),
             Order.is_automated == True,
+            Order.status != "rejected",  # rejected orders don't consume cooldown
         ).order_by(Order.created_at.desc()).limit(1)
     )
     return result.scalar_one_or_none()
@@ -159,10 +160,12 @@ async def validate(
                 "Fund account to $25,000+ to remove this restriction."
             )
 
-    # 4. Max open positions
-    open_count = await _open_position_count(db, config.user_id, conn.id)
-    if open_count >= config.max_open_positions:
-        return ValidationResult(False, f"Max open positions ({config.max_open_positions}) reached")
+    # 4. Max open positions — only gates new entries (BUY), never exits (SELL).
+    # A SELL closes an existing long; blocking it would trap us in a position.
+    if signal.signal_type == "BUY":
+        open_count = await _open_position_count(db, config.user_id, conn.id)
+        if open_count >= config.max_open_positions:
+            return ValidationResult(False, f"Max open positions ({config.max_open_positions}) reached")
 
     # 5. Calculate position size from live account (already fetched above for PDT check).
     # A strategy's own allocated capital drives sizing when present, but the
