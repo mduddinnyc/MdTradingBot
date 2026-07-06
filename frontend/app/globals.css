@@ -3,7 +3,11 @@
 @tailwind utilities;
 
 body {
-  @apply bg-gray-950 text-gray-100 antialiased;
+  @apply bg-gray-950 text-gray-100 antialiased font-sans;
+}
+
+.mono {
+  font-family: var(--font-mono), "IBM Plex Mono", monospace;
 }
 
 .card {
@@ -30,4 +34,19 @@ body {
 
 .label {
   @apply block text-sm font-medium text-gray-400 mb-1;
+}
+
+/* Large monospace financial figure — portfolio value, P&L, position size */
+.data-value {
+  @apply font-mono text-xl font-semibold tracking-tight;
+}
+
+/* Compact section label — uppercase, muted, used above metric cards */
+.section-label {
+  @apply text-[10px] uppercase tracking-widest text-gray-500 font-medium;
+}
+
+/* Standard table header cell */
+.th {
+  @apply pb-3 text-xs uppercase tracking-wider text-gray-500 font-medium text-left;
 }

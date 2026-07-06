@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { authApi, brokerApi, signalApi } from "@/lib/api";
-import { fmtUsd, fmtPct } from "@/lib/utils";
+import { fmtUsd, fmtPct, cn } from "@/lib/utils";
 import SignalBadge from "@/components/SignalBadge";
 import SortableTh, { SortState, toggleSort, sortRows } from "@/components/SortableTh";
 import Link from "next/link";
@@ -33,17 +33,20 @@ export default function DashboardPage() {
       {/* Account Overview */}
       {account ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: "Portfolio Value", value: fmtUsd(account.portfolio_value) },
-            { label: "Cash", value: fmtUsd(account.cash) },
-            { label: "Buying Power", value: fmtUsd(account.buying_power) },
-            { label: "Today's Change", value: fmtUsd(parseFloat(account.equity) - parseFloat(account.last_equity)) },
-          ].map(({ label, value }) => (
-            <div key={label} className="card">
-              <p className="text-xs text-gray-400 mb-1">{label}</p>
-              <p className="text-xl font-bold">{value}</p>
-            </div>
-          ))}
+          {(() => {
+            const change = parseFloat(account.equity) - parseFloat(account.last_equity);
+            return [
+              { label: "Portfolio Value", value: fmtUsd(account.portfolio_value), color: "" },
+              { label: "Cash", value: fmtUsd(account.cash), color: "" },
+              { label: "Buying Power", value: fmtUsd(account.buying_power), color: "" },
+              { label: "Today's Change", value: (change >= 0 ? "+" : "") + fmtUsd(change), color: change >= 0 ? "text-buy" : "text-sell" },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="card">
+                <p className="section-label mb-2">{label}</p>
+                <p className={cn("data-value", color || "text-gray-100")}>{value}</p>
+              </div>
+            ));
+          })()}
         </div>
       ) : (
         <div className="card text-center py-8">
@@ -78,10 +81,10 @@ export default function DashboardPage() {
                 <tr key={s.id} className="hover:bg-gray-800/30 transition-colors">
                   <td className="py-2 font-mono font-bold">{s.symbol}</td>
                   <td className="py-2"><SignalBadge type={s.signal_type} /></td>
-                  <td className="py-2">{fmtPct(s.confidence)}</td>
-                  <td className="py-2">{s.entry_price ? fmtUsd(s.entry_price) : "—"}</td>
-                  <td className="py-2">{s.target_price ? fmtUsd(s.target_price) : "—"}</td>
-                  <td className="py-2 text-gray-400">{s.pattern_detected || "—"}</td>
+                  <td className="py-2 font-mono text-xs">{fmtPct(s.confidence)}</td>
+                  <td className="py-2 font-mono">{s.entry_price ? fmtUsd(s.entry_price) : "—"}</td>
+                  <td className="py-2 font-mono text-buy">{s.target_price ? fmtUsd(s.target_price) : "—"}</td>
+                  <td className="py-2 text-gray-400 text-xs">{s.pattern_detected || "—"}</td>
                 </tr>
               ))}
             </tbody>
