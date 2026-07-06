@@ -4,10 +4,14 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        brand: { DEFAULT: "#0ea5e9", dark: "#0284c7" },
-        buy:   "#22c55e",
-        sell:  "#ef4444",
-        hold:  "#f59e0b",
+        brand: { DEFAULT: "#5B7FFF", dark: "#4A6EEE" },
+        buy:   "#10D987",
+        sell:  "#FF4D6D",
+        hold:  "#F5A623",
+      },
+      fontFamily: {
+        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "Consolas", "monospace"],
       },
     },
   },

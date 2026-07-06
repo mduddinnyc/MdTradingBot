@@ -99,16 +99,16 @@ export default function SignalsPage() {
                           style={{ width: fmtPct(s.confidence) }}
                         />
                       </div>
-                      <span className="text-xs">{fmtPct(s.confidence)}</span>
+                      <span className="text-xs font-mono">{fmtPct(s.confidence)}</span>
                     </div>
                   </td>
-                  <td className="py-3">{s.entry_price ? fmtUsd(s.entry_price) : "—"}</td>
-                  <td className="py-3 text-buy">{s.target_price ? fmtUsd(s.target_price) : "—"}</td>
-                  <td className="py-3 text-sell">{s.stop_price ? fmtUsd(s.stop_price) : "—"}</td>
+                  <td className="py-3 font-mono">{s.entry_price ? fmtUsd(s.entry_price) : "—"}</td>
+                  <td className="py-3 font-mono text-buy">{s.target_price ? fmtUsd(s.target_price) : "—"}</td>
+                  <td className="py-3 font-mono text-sell">{s.stop_price ? fmtUsd(s.stop_price) : "—"}</td>
                   <td className="py-3 text-gray-400 text-xs">{s.pattern_detected || "—"}</td>
-                  <td className="py-3 text-xs">{s.indicators?.rsi?.toFixed(1) || "—"}</td>
-                  <td className="py-3 text-xs text-gray-400">{s.timeframe}</td>
-                  <td className="py-3 text-xs text-gray-400">
+                  <td className="py-3 text-xs font-mono">{s.indicators?.rsi?.toFixed(1) || "—"}</td>
+                  <td className="py-3 text-xs text-gray-400 font-mono">{s.timeframe}</td>
+                  <td className="py-3 text-xs text-gray-400 font-mono">
                     {new Date(s.created_at).toLocaleTimeString()}
                   </td>
                   <td className="py-3">
