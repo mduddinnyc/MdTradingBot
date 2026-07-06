@@ -1,0 +1,2 @@
+# MdTradingBot
+Trading AI 
