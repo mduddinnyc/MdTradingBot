@@ -77,13 +77,14 @@ test.describe("Order History quick approve", () => {
     });
 
     await page.goto("/orders");
-    await expect(page.getByText("pending_approval")).toBeVisible();
+    // Status cell shows "Pending" (with icon buttons) not raw "pending_approval"
+    await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Approve", exact: true }).click();
     await approvePromise;
 
     await expect(page.getByText("filled")).toBeVisible();
-    await expect(page.getByText("pending_approval")).not.toBeVisible();
+    await expect(page.getByRole("button", { name: "Approve", exact: true })).toHaveCount(0);
   });
 
   test("positive: Reject button calls reject", async ({ page }) => {

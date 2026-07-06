@@ -298,6 +298,7 @@ export default function OrdersPage() {
               <button
                 disabled={busyId === o.id}
                 onClick={() => approveMut.mutate(o.id)}
+                aria-label="Approve"
                 className="p-0.5 rounded bg-buy/10 text-buy hover:bg-buy/20 disabled:opacity-50"
               >
                 <Check size={11} />
@@ -305,6 +306,7 @@ export default function OrdersPage() {
               <button
                 disabled={busyId === o.id}
                 onClick={() => rejectMut.mutate(o.id)}
+                aria-label="Reject"
                 className="p-0.5 rounded bg-sell/10 text-sell hover:bg-sell/20 disabled:opacity-50"
               >
                 <XIcon size={11} />
