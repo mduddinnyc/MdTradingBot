@@ -187,7 +187,7 @@ export default function SignalsPage() {
                 <SortableTh label="RSI"     sortKey="rsi"          sort={sort} onSort={onSort} className="th" />
                 <SortableTh label="TF"      sortKey="timeframe"    sort={sort} onSort={onSort} className="th" />
                 <SortableTh label="Time"    sortKey="created_at"   sort={sort} onSort={onSort} className="th" />
-                <th className="th pr-5">Trade</th>
+                <th className="th pr-5">Order</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/50">
@@ -226,20 +226,27 @@ export default function SignalsPage() {
                       <div className="flex items-center gap-1.5">
                         {isOptions ? (
                           <button
-                            onClick={() => { setOptionsTicker(s.symbol); setOptionsSide(s.signal_type === "SELL" ? "sell" : "buy"); }}
+                            onClick={() => { setOptionsTicker(s.symbol); setOptionsSide("buy"); }}
                             className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-brand/10 text-brand hover:bg-brand/20 transition-colors"
                           >
                             <ArrowUpRight size={11} />
                             Options
                           </button>
                         ) : (
-                          <button
-                            onClick={() => { setOrderTicker(s.symbol); setOrderSide(s.signal_type === "SELL" ? "sell" : "buy"); }}
-                            className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium bg-brand/10 text-brand hover:bg-brand/20 transition-colors"
-                          >
-                            <ArrowUpRight size={11} />
-                            Trade
-                          </button>
+                          <>
+                            <button
+                              onClick={() => { setOrderTicker(s.symbol); setOrderSide("buy"); }}
+                              className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-bold bg-buy/10 text-buy hover:bg-buy/20 transition-colors"
+                            >
+                              B
+                            </button>
+                            <button
+                              onClick={() => { setOrderTicker(s.symbol); setOrderSide("sell"); }}
+                              className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-bold bg-sell/10 text-sell hover:bg-sell/20 transition-colors"
+                            >
+                              S
+                            </button>
+                          </>
                         )}
                         <button
                           onClick={() => refreshMut.mutate(s.symbol)}

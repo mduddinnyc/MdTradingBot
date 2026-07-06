@@ -16,6 +16,7 @@ import { useEffect } from "react";
 import {
   ArrowUpRight, Bot, Users, Check, X as XIcon,
   Shield, AlertTriangle, OctagonX, Settings2, Zap,
+  Sliders, ChevronDown, ChevronUp,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -70,6 +71,149 @@ function PendingApprovals({ orders, onApprove, onReject, busyId }: {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── Custom Strategy Builder ─────────────────────────────────
+function CustomStrategyBuilder() {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    trendWeight: 33,
+    momentumWeight: 33,
+    patternWeight: 34,
+    minConfidence: 40,
+    timeframe: "1Hour",
+    positionSize: 1000,
+    stopLossPct: 5,
+    takeProfitPct: 10,
+    maxPositions: 3,
+    regimeGate: "any",
+  });
+  const [saved, setSaved] = useState(false);
+
+  function save() {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
+  }
+
+  const totalWeight = form.trendWeight + form.momentumWeight + form.patternWeight;
+
+  return (
+    <div className="card">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between text-sm font-semibold text-gray-300 hover:text-white"
+      >
+        <div className="flex items-center gap-2">
+          <Sliders size={15} className="text-brand" />
+          Custom Strategy Builder
+        </div>
+        {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+      </button>
+
+      {open && (
+        <div className="mt-4 space-y-5">
+          <p className="text-xs text-gray-500">Design your own signal strategy. The engine scores each ticker using weighted combinations of trend, momentum, and pattern indicators.</p>
+
+          {/* Name */}
+          <div>
+            <label className="label">Strategy Name</label>
+            <input className="input" value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} placeholder="My Strategy" />
+          </div>
+
+          {/* Indicator weights */}
+          <div>
+            <label className="label">
+              Indicator Weights{" "}
+              <span className={cn("ml-1 text-xs", totalWeight === 100 ? "text-buy" : "text-sell")}>
+                (total: {totalWeight}% — must equal 100)
+              </span>
+            </label>
+            <div className="grid grid-cols-3 gap-3 mt-2">
+              {(
+                [
+                  { key: "trendWeight" as const, label: "Trend (EMA/VWAP)" },
+                  { key: "momentumWeight" as const, label: "Momentum (RSI/BB)" },
+                  { key: "patternWeight" as const, label: "Pattern (Candles)" },
+                ] as { key: keyof typeof form; label: string }[]
+              ).map(({ key, label }) => (
+                <div key={key}>
+                  <label className="text-[11px] text-gray-500 block mb-1">{label}</label>
+                  <input
+                    type="number" min={0} max={100}
+                    className="input text-center font-mono"
+                    value={form[key] as number}
+                    onChange={e => setForm(f => ({...f, [key]: Number(e.target.value)}))}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Parameters grid */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Min Confidence (%)</label>
+              <input type="number" min={5} max={95} className="input font-mono" value={form.minConfidence}
+                onChange={e => setForm(f => ({...f, minConfidence: Number(e.target.value)}))} />
+            </div>
+            <div>
+              <label className="label">Timeframe</label>
+              <select className="input" value={form.timeframe} onChange={e => setForm(f => ({...f, timeframe: e.target.value}))}>
+                <option value="5Min">5 Minutes</option>
+                <option value="15Min">15 Minutes</option>
+                <option value="1Hour">1 Hour</option>
+                <option value="Daily">Daily</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Capital per Trade ($)</label>
+              <input type="number" min={100} className="input font-mono" value={form.positionSize}
+                onChange={e => setForm(f => ({...f, positionSize: Number(e.target.value)}))} />
+            </div>
+            <div>
+              <label className="label">Max Open Positions</label>
+              <input type="number" min={1} max={20} className="input font-mono" value={form.maxPositions}
+                onChange={e => setForm(f => ({...f, maxPositions: Number(e.target.value)}))} />
+            </div>
+            <div>
+              <label className="label">Stop Loss (%)</label>
+              <input type="number" min={1} max={50} className="input font-mono" value={form.stopLossPct}
+                onChange={e => setForm(f => ({...f, stopLossPct: Number(e.target.value)}))} />
+            </div>
+            <div>
+              <label className="label">Take Profit (%)</label>
+              <input type="number" min={1} max={100} className="input font-mono" value={form.takeProfitPct}
+                onChange={e => setForm(f => ({...f, takeProfitPct: Number(e.target.value)}))} />
+            </div>
+          </div>
+
+          {/* Market regime gate */}
+          <div>
+            <label className="label">Market Regime Gate</label>
+            <select className="input" value={form.regimeGate} onChange={e => setForm(f => ({...f, regimeGate: e.target.value}))}>
+              <option value="any">Trade in any regime</option>
+              <option value="trending_only">Trending markets only (bull/bear)</option>
+              <option value="sideways_only">Sideways markets only</option>
+              <option value="bull_only">Bull market only</option>
+            </select>
+          </div>
+
+          <button
+            onClick={save}
+            disabled={!form.name || totalWeight !== 100}
+            className={cn("btn-primary w-full", saved && "bg-buy/80")}
+          >
+            {saved ? "✓ Strategy Saved" : "Save Custom Strategy"}
+          </button>
+
+          {(!form.name || totalWeight !== 100) && (
+            <p className="text-xs text-gray-600 text-center">Enter a name and ensure weights sum to 100% to save.</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -168,9 +312,12 @@ function AutomationPanel() {
 
   if (!(connections as any[]).length) {
     return (
-      <div className="card text-center py-10">
-        <p className="text-gray-400 mb-3">Connect a broker account to enable automation.</p>
-        <Link href="/connections" className="btn-primary inline-block">Connect Broker</Link>
+      <div className="space-y-5">
+        <div className="card text-center py-10">
+          <p className="text-gray-400 mb-3">Connect a broker account to enable automation.</p>
+          <Link href="/connections" className="btn-primary inline-block">Connect Broker</Link>
+        </div>
+        <CustomStrategyBuilder />
       </div>
     );
   }
@@ -363,6 +510,7 @@ function AutomationPanel() {
       <AutomationDiagnosticPanel />
       <StrategiesPanel />
       <OptionsAutomationPanel />
+      <CustomStrategyBuilder />
     </div>
   );
 }

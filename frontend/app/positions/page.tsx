@@ -44,15 +44,127 @@ function TypeBadge({ order }: { order: any }) {
 
 // ── Open Positions panel ─────────────────────────────────────
 function OpenPositions() {
+  const [sorting, setSorting] = useState<SortingState>([]);
   const { data: connections = [] } = useQuery({ queryKey: ["connections"], queryFn: brokerApi.list });
   const conn = (connections as any[])[0];
 
-  const { data: positions = [], isLoading } = useQuery({
+  const { data: rawPositions = [], isLoading } = useQuery({
     queryKey: ["positions", conn?.id],
     queryFn: () => brokerApi.positions(conn.id),
     enabled: !!conn,
     refetchInterval: 30_000,
   });
+
+  const positions = rawPositions as any[];
+
+  const posColumns = useMemo<ColumnDef<any>[]>(() => [
+    {
+      id: "symbol",
+      header: "Symbol",
+      accessorKey: "symbol",
+      cell: ({ getValue }) => (
+        <span className="font-mono font-bold text-gray-100">{getValue() as string}</span>
+      ),
+    },
+    {
+      id: "side",
+      header: "Side",
+      accessorKey: "side",
+      cell: ({ getValue }) => {
+        const side = getValue() as string;
+        return (
+          <span className={cn(
+            "text-[10px] font-bold px-1.5 py-0.5 rounded",
+            side === "long" ? "bg-buy/10 text-buy" : "bg-sell/10 text-sell"
+          )}>
+            {side.toUpperCase()}
+          </span>
+        );
+      },
+    },
+    {
+      id: "qty",
+      header: "Qty",
+      accessorFn: (row) => parseFloat(row.qty),
+      cell: ({ getValue }) => (
+        <span className="font-mono text-gray-300">{(getValue() as number).toFixed(0)}</span>
+      ),
+    },
+    {
+      id: "avg_entry",
+      header: "Avg Entry",
+      accessorFn: (row) => parseFloat(row.avg_entry_price),
+      cell: ({ getValue }) => (
+        <span className="font-mono text-gray-400">{fmtUsd(getValue() as number)}</span>
+      ),
+    },
+    {
+      id: "current",
+      header: "Current",
+      accessorFn: (row) => parseFloat(row.current_price),
+      cell: ({ getValue }) => (
+        <span className="font-mono text-gray-100">{fmtUsd(getValue() as number)}</span>
+      ),
+    },
+    {
+      id: "market_value",
+      header: "Market Value",
+      accessorFn: (row) => parseFloat(row.market_value),
+      cell: ({ getValue }) => (
+        <span className="font-mono text-gray-300">{fmtUsd(getValue() as number)}</span>
+      ),
+    },
+    {
+      id: "unrealized_pl",
+      header: "Unrealized P&L",
+      accessorFn: (row) => parseFloat(row.unrealized_pl),
+      cell: ({ row }) => {
+        const pl = parseFloat(row.original.unrealized_pl);
+        const plPct = parseFloat(row.original.unrealized_plpc);
+        const isPos = pl >= 0;
+        return (
+          <>
+            <span className={cn("font-mono font-medium", isPos ? "text-buy" : "text-sell")}>
+              {isPos ? "+" : ""}{fmtUsd(pl)}
+            </span>
+            <br />
+            <span className={cn("text-xs font-mono", isPos ? "text-buy/70" : "text-sell/70")}>
+              {isPos ? "+" : ""}{(plPct * 100).toFixed(2)}%
+            </span>
+          </>
+        );
+      },
+    },
+  ], []);
+
+  const posTable = useReactTable({
+    data: positions,
+    columns: posColumns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
+  // Column widths for table-fixed layout
+  const COL_WIDTHS: Record<string, string> = {
+    symbol: "240px",
+    side: "80px",
+    qty: "80px",
+    avg_entry: "110px",
+    current: "110px",
+    market_value: "130px",
+    unrealized_pl: "150px",
+  };
+  const COL_ALIGN: Record<string, string> = {
+    symbol: "text-left",
+    side: "text-center",
+    qty: "text-right",
+    avg_entry: "text-right",
+    current: "text-right",
+    market_value: "text-right",
+    unrealized_pl: "text-right",
+  };
 
   if (!conn) {
     return (
@@ -66,64 +178,56 @@ function OpenPositions() {
     return <div className="card text-center py-10 text-gray-500 text-sm">Loading positions…</div>;
   }
 
-  if ((positions as any[]).length === 0) {
+  if (positions.length === 0) {
     return <div className="card text-center py-10 text-gray-500 text-sm">No open positions</div>;
   }
 
   return (
     <div className="card overflow-x-auto p-0">
-      <table className="w-full text-sm">
+      <table className="table-fixed text-sm" style={{ minWidth: "900px", width: "100%" }}>
+        <colgroup>
+          {posTable.getFlatHeaders().map((header) => (
+            <col key={header.id} style={{ width: COL_WIDTHS[header.id] }} />
+          ))}
+        </colgroup>
         <thead>
-          <tr className="text-left border-b border-gray-800">
-            <th className="th pl-5">Symbol</th>
-            <th className="th">Side</th>
-            <th className="th text-right">Qty</th>
-            <th className="th text-right">Avg Entry</th>
-            <th className="th text-right">Current</th>
-            <th className="th text-right">Market Value</th>
-            <th className="th text-right pr-5">Unrealized P&L</th>
+          <tr className="border-b border-gray-800">
+            {posTable.getFlatHeaders().map((header) => (
+              <th
+                key={header.id}
+                onClick={header.column.getToggleSortingHandler()}
+                style={{ width: COL_WIDTHS[header.id] }}
+                className={cn(
+                  "th pl-5 first:pl-5 last:pr-5",
+                  COL_ALIGN[header.id],
+                  header.column.getCanSort() && "cursor-pointer select-none"
+                )}
+              >
+                <div className={cn("flex items-center gap-1", COL_ALIGN[header.id] !== "text-left" && "justify-end")}>
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                  {header.column.getCanSort() && (
+                    header.column.getIsSorted() === "asc" ? <ArrowUp size={10} className="text-brand" /> :
+                    header.column.getIsSorted() === "desc" ? <ArrowDown size={10} className="text-brand" /> :
+                    <ArrowUpDown size={10} className="text-gray-600" />
+                  )}
+                </div>
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-800/50">
-          {(positions as any[]).map((p) => {
-            const pl = parseFloat(p.unrealized_pl);
-            const plPct = parseFloat(p.unrealized_plpc);
-            const isPos = pl >= 0;
-            return (
-              <tr key={p.symbol} className="hover:bg-gray-800/20 transition-colors">
-                <td className="py-3 pl-5 font-mono font-bold text-gray-100">{p.symbol}</td>
-                <td className="py-3">
-                  <span className={cn(
-                    "text-[10px] font-bold px-1.5 py-0.5 rounded",
-                    p.side === "long" ? "bg-buy/10 text-buy" : "bg-sell/10 text-sell"
-                  )}>
-                    {p.side.toUpperCase()}
-                  </span>
+          {posTable.getRowModel().rows.map((row) => (
+            <tr key={row.id} className="hover:bg-gray-800/20 transition-colors">
+              {row.getVisibleCells().map((cell) => (
+                <td
+                  key={cell.id}
+                  className={cn("py-3 pl-5 last:pr-5", COL_ALIGN[cell.column.id])}
+                >
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
-                <td className="py-3 text-right font-mono text-gray-300">
-                  {parseFloat(p.qty).toFixed(0)}
-                </td>
-                <td className="py-3 text-right font-mono text-gray-400">
-                  {fmtUsd(p.avg_entry_price)}
-                </td>
-                <td className="py-3 text-right font-mono text-gray-100">
-                  {fmtUsd(p.current_price)}
-                </td>
-                <td className="py-3 text-right font-mono text-gray-300">
-                  {fmtUsd(p.market_value)}
-                </td>
-                <td className="py-3 text-right pr-5">
-                  <span className={cn("font-mono font-medium", isPos ? "text-buy" : "text-sell")}>
-                    {isPos ? "+" : ""}{fmtUsd(pl)}
-                  </span>
-                  <br />
-                  <span className={cn("text-xs font-mono", isPos ? "text-buy/70" : "text-sell/70")}>
-                    {isPos ? "+" : ""}{(plPct * 100).toFixed(2)}%
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
+              ))}
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
