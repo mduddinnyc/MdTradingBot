@@ -1,6 +1,8 @@
 import base64
 import io
+import time
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 
 import qrcode
@@ -40,6 +42,32 @@ from app.services import notifications as notif_svc
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# ── Login rate limiting (in-process, per IP) ────────────────────
+# Tracks (count, window_start) per IP. Resets after WINDOW_SECS.
+_rate_store: dict[str, tuple[int, float]] = defaultdict(lambda: (0, time.monotonic()))
+_RATE_LIMIT = 10    # max failures per window
+_WINDOW_SECS = 60   # 1-minute window
+
+def _check_rate_limit(ip: str) -> None:
+    count, start = _rate_store[ip]
+    now = time.monotonic()
+    if now - start > _WINDOW_SECS:
+        _rate_store[ip] = (0, now)
+        return
+    if count >= _RATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Too many login attempts. Try again in a minute.")
+
+def _record_failure(ip: str) -> None:
+    count, start = _rate_store[ip]
+    now = time.monotonic()
+    if now - start > _WINDOW_SECS:
+        _rate_store[ip] = (1, now)
+    else:
+        _rate_store[ip] = (count + 1, start)
+
+def _clear_rate_limit(ip: str) -> None:
+    _rate_store.pop(ip, None)
+
 
 # ── Register ───────────────────────────────────────────────────
 
@@ -68,10 +96,14 @@ async def register(body: RegisterRequest, request: Request, db: DB):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, request: Request, db: DB):
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(client_ip)
+
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
     if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
+        _record_failure(client_ip)
         await audit_log(
             db, action="LOGIN_FAILURE", outcome="failure",
             metadata={"email": body.email}, request=request
@@ -89,11 +121,14 @@ async def login(body: LoginRequest, request: Request, db: DB):
             )
         secret = decrypt_totp_secret(user.totp_secret_enc)
         if not verify_totp(secret, body.totp_code):
+            _record_failure(client_ip)
             await audit_log(
                 db, action="LOGIN_2FA_FAILURE", outcome="failure",
                 user_id=user.id, request=request
             )
             raise HTTPException(status_code=401, detail="Invalid 2FA code")
+
+    _clear_rate_limit(client_ip)
 
     raw_refresh, refresh_hash, expires_at = create_refresh_token()
 
