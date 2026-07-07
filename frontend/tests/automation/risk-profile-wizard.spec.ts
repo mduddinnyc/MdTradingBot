@@ -72,7 +72,7 @@ async function mockAutomationPage(page: Page, opts: { existingConfig?: boolean; 
       id: "cfg-mock-1", broker_connection_id: CONNECTION.id, is_enabled: true,
       min_confidence: 0.6, max_position_size_usd: 1000, max_position_pct: 0.1,
       stop_loss_pct: 0.02, take_profit_pct: 0.04, max_daily_loss_usd: 500,
-      max_open_positions: 5, cooldown_minutes: 60, created_at: new Date().toISOString(),
+      max_open_positions: 5, cooldown_minutes: 60, max_trades_per_day: null, created_at: new Date().toISOString(),
     }]);
   });
 
