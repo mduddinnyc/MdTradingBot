@@ -9,6 +9,7 @@ import {
   Brain, FlaskConical, Link2, LogOut, ListOrdered, Bot,
 } from "lucide-react";
 import LiveClock from "@/components/LiveClock";
+import NavigationProgress from "@/components/NavigationProgress";
 
 const NAV_MAIN = [
   { href: "/dashboard",   label: "Dashboard",   icon: LayoutDashboard },
@@ -72,6 +73,8 @@ export default function Navbar() {
   };
 
   return (
+    <>
+    <NavigationProgress />
     <nav className="w-52 min-h-screen bg-gray-900 border-r border-gray-800 flex flex-col">
       {/* Wordmark */}
       <div className="px-4 pt-5 pb-4 border-b border-gray-800">
@@ -127,5 +130,6 @@ export default function Navbar() {
         </button>
       </div>
     </nav>
+    </>
   );
 }
