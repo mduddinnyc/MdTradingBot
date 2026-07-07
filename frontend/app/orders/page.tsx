@@ -1,10 +1,11 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useReactTable, getCoreRowModel, getSortedRowModel,
   flexRender, type ColumnDef, type SortingState,
 } from "@tanstack/react-table";
+import { createChart, ColorType, CrosshairMode } from "lightweight-charts";
 import { signalApi } from "@/lib/api";
 import { fmtUsd, cn } from "@/lib/utils";
 import { Download, ArrowUp, ArrowDown, ArrowUpDown, Check, X as XIcon } from "lucide-react";
@@ -44,75 +45,122 @@ function TypeBadge({ order }: { order: any }) {
   );
 }
 
-// ── Mini P&L SVG Bar Chart ───────────────────────────────────
-function PnlChart({ orders }: { orders: any[] }) {
-  const CHART_H = 120;
-  const CHART_W = 600;
-  const BAR_GAP = 4;
-  const LABEL_H = 20;
-  const PLOT_H = CHART_H - LABEL_H;
+// ── Execution History Chart (lightweight-charts) ─────────────
+type ChartView = "pnl" | "cumulative" | "count";
 
+const CHART_VIEW_OPTS: { key: ChartView; label: string }[] = [
+  { key: "pnl",        label: "Daily P&L"      },
+  { key: "cumulative", label: "Cumulative P&L"  },
+  { key: "count",      label: "Trade Count"     },
+];
+
+function ExecutionChart({ orders }: { orders: any[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState<ChartView>("cumulative");
+
+  // build day-level aggregates
   const byDay = useMemo(() => {
-    const map: Record<string, number> = {};
+    const map: Record<string, { pnl: number; count: number }> = {};
     for (const o of orders) {
       if (!o.created_at) continue;
       const day = o.created_at.slice(0, 10);
       const pnl = parseFloat(o.realized_pnl ?? "0") || 0;
-      map[day] = (map[day] ?? 0) + pnl;
+      if (!map[day]) map[day] = { pnl: 0, count: 0 };
+      map[day].pnl += pnl;
+      map[day].count += 1;
     }
-    const sorted = Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
-    return sorted.slice(-14);
+    return Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, v]) => ({ day, ...v }));
   }, [orders]);
 
-  const hasData = byDay.some(([, v]) => v !== 0);
+  const hasData = byDay.length > 0;
 
-  if (!hasData) {
-    return (
-      <div className="card flex items-center justify-center h-[120px] text-gray-600 text-sm">
-        No closed P&amp;L data yet
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!ref.current || !hasData) return;
 
-  const maxAbs = Math.max(...byDay.map(([, v]) => Math.abs(v)), 1);
-  const n = byDay.length;
-  const barW = Math.floor((CHART_W - BAR_GAP * (n + 1)) / n);
-  const midY = PLOT_H / 2;
+    const chart = createChart(ref.current, {
+      layout: { background: { type: ColorType.Solid, color: "#0f172a" }, textColor: "#94a3b8" },
+      grid: { vertLines: { color: "#1e293b" }, horzLines: { color: "#1e293b" } },
+      crosshair: { mode: CrosshairMode.Normal },
+      width: ref.current.clientWidth,
+      height: 180,
+      timeScale: { borderColor: "#1e293b", timeVisible: false },
+      rightPriceScale: { borderColor: "#1e293b" },
+    });
+
+    const toTime = (day: string) =>
+      Math.floor(new Date(day + "T12:00:00Z").getTime() / 1000) as any;
+
+    if (view === "pnl") {
+      const series = chart.addHistogramSeries({
+        color: "#10D987",
+        priceFormat: { type: "price", precision: 2 },
+      });
+      series.setData(
+        byDay.map(({ day, pnl }) => ({
+          time: toTime(day),
+          value: pnl,
+          color: pnl >= 0 ? "#10D987" : "#FF4D6D",
+        }))
+      );
+    } else if (view === "cumulative") {
+      let cum = 0;
+      const data = byDay.map(({ day, pnl }) => {
+        cum += pnl;
+        return { time: toTime(day), value: cum };
+      });
+      const lastVal = data[data.length - 1]?.value ?? 0;
+      const series = chart.addAreaSeries({
+        lineColor: lastVal >= 0 ? "#10D987" : "#FF4D6D",
+        topColor: lastVal >= 0 ? "rgba(16,217,135,0.3)" : "rgba(255,77,109,0.3)",
+        bottomColor: lastVal >= 0 ? "rgba(16,217,135,0.02)" : "rgba(255,77,109,0.02)",
+        lineWidth: 2,
+      });
+      series.setData(data);
+    } else {
+      const series = chart.addHistogramSeries({ color: "#5B7FFF" });
+      series.setData(byDay.map(({ day, count }) => ({ time: toTime(day), value: count })));
+    }
+
+    chart.timeScale().fitContent();
+
+    const ro = new ResizeObserver(() => {
+      if (ref.current) chart.applyOptions({ width: ref.current.clientWidth });
+    });
+    ro.observe(ref.current);
+
+    return () => { ro.disconnect(); chart.remove(); };
+  }, [byDay, view, hasData]);
 
   return (
-    <div className="card p-3 overflow-x-auto">
-      <svg
-        viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-        width="100%"
-        style={{ maxWidth: CHART_W, display: "block" }}
-        aria-label="Daily realized P&L chart"
-      >
-        <line x1={0} y1={midY} x2={CHART_W} y2={midY} stroke="#374151" strokeWidth={1} />
-        {byDay.map(([day, pnl], i) => {
-          const x = BAR_GAP + i * (barW + BAR_GAP);
-          const barH = Math.max(2, Math.abs(pnl) / maxAbs * (midY - 4));
-          const isPos = pnl >= 0;
-          const barY = isPos ? midY - barH : midY;
-          const fill = isPos ? "#10D987" : "#FF4D6D";
-          const dateObj = new Date(day + "T00:00:00");
-          const label = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-          return (
-            <g key={day}>
-              <rect x={x} y={barY} width={barW} height={barH} fill={fill} rx={2} opacity={0.85} />
-              <text
-                x={x + barW / 2}
-                y={CHART_H - 2}
-                textAnchor="middle"
-                fontSize={9}
-                fill="#6B7280"
-                fontFamily="IBM Plex Mono, monospace"
-              >
-                {label}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+    <div className="card">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">Execution History</p>
+        <div className="flex gap-1">
+          {CHART_VIEW_OPTS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setView(key)}
+              className={cn(
+                "px-2.5 py-0.5 text-[11px] font-medium rounded transition-colors",
+                view === key
+                  ? "bg-brand/20 text-brand border border-brand/30"
+                  : "text-gray-500 hover:text-gray-200"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {hasData ? (
+        <div ref={ref} style={{ height: 180 }} />
+      ) : (
+        <div className="flex items-center justify-center h-[100px] text-gray-600 text-sm">
+          No execution data for this period
+        </div>
+      )}
     </div>
   );
 }
@@ -406,7 +454,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Mini P&L chart */}
-      <PnlChart orders={filtered} />
+      <ExecutionChart orders={filtered} />
 
       {/* Table */}
       <div className="card overflow-x-auto p-0">

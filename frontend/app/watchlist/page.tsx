@@ -232,7 +232,7 @@ export default function WatchlistPage() {
               </div>
             )}
 
-            <CandleChart bars={bars} height={300} />
+            <CandleChart bars={bars} height={300} showTypeToggle />
           </div>
         )}
       </div>

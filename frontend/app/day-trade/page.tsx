@@ -124,7 +124,7 @@ function DetailPanel({ ticker, onClose }: { ticker: string; onClose: () => void 
           )}
 
           {data.bars?.length > 0 ? (
-            <CandleChart bars={data.bars} height={300} />
+            <CandleChart bars={data.bars} height={300} showTypeToggle />
           ) : (
             <div className="text-center py-8 text-gray-500 text-sm bg-gray-900/40 rounded-lg">
               No chart data — connect a broker to pull real bars for {ticker}.
