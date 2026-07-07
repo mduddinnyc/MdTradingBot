@@ -26,6 +26,7 @@ class AutomationConfig(Base):
     max_daily_loss_usd: Mapped[float | None] = mapped_column(Float)
     max_open_positions: Mapped[int] = mapped_column(Integer, default=5)
     cooldown_minutes: Mapped[int] = mapped_column(Integer, default=60)
+    max_trades_per_day: Mapped[int | None] = mapped_column(Integer)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

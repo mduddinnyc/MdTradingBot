@@ -6,18 +6,19 @@ import { authApi, signalApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Zap, ArrowLeftRight, Briefcase,
-  Brain, FlaskConical, Link2, LogOut, ListOrdered,
+  Brain, FlaskConical, Link2, LogOut, ListOrdered, Bot,
 } from "lucide-react";
 import LiveClock from "@/components/LiveClock";
 
 const NAV_MAIN = [
-  { href: "/dashboard",  label: "Dashboard",  icon: LayoutDashboard },
-  { href: "/signals",    label: "Signals",    icon: Zap },
-  { href: "/trade",      label: "Trade",      icon: ArrowLeftRight },
-  { href: "/positions",  label: "Positions",  icon: Briefcase },
-  { href: "/orders",     label: "Orders",     icon: ListOrdered },
-  { href: "/analysis",   label: "Analysis",   icon: Brain },
-  { href: "/backtest",   label: "Backtest",   icon: FlaskConical },
+  { href: "/dashboard",   label: "Dashboard",   icon: LayoutDashboard },
+  { href: "/signals",     label: "Signals",     icon: Zap },
+  { href: "/trade",       label: "Trade",       icon: ArrowLeftRight },
+  { href: "/automation",  label: "Automation",  icon: Bot },
+  { href: "/positions",   label: "Positions",   icon: Briefcase },
+  { href: "/orders",      label: "Orders",      icon: ListOrdered },
+  { href: "/analysis",    label: "Analysis",    icon: Brain },
+  { href: "/backtest",    label: "Backtest",    icon: FlaskConical },
 ];
 
 const NAV_BOTTOM = [

@@ -101,6 +101,20 @@ async def _day_trade_count(db: AsyncSession, user_id: uuid.UUID, conn_id: uuid.U
     return sum(1 for sides in day_sides.values() if "buy" in sides and "sell" in sides)
 
 
+async def _todays_filled_count(db: AsyncSession, user_id: uuid.UUID, conn_id: uuid.UUID) -> int:
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    result = await db.execute(
+        select(func.count()).select_from(Order).where(
+            Order.user_id == user_id,
+            Order.broker_connection_id == conn_id,
+            Order.status == "filled",
+            Order.filled_at >= today_start,
+            Order.is_automated == True,
+        )
+    )
+    return result.scalar_one() or 0
+
+
 async def _last_signal_time(db: AsyncSession, user_id: uuid.UUID, ticker: str, signal_type: str) -> datetime | None:
     result = await db.execute(
         select(Order.created_at).where(
@@ -133,7 +147,13 @@ async def validate(
     if signal.confidence < config.min_confidence:
         return ValidationResult(False, f"Confidence {signal.confidence:.2f} < threshold {config.min_confidence:.2f}")
 
-    # 2. Cooldown
+    # 2. Daily trade count limit (automated fills only)
+    if config.max_trades_per_day is not None:
+        filled_today = await _todays_filled_count(db, config.user_id, conn.id)
+        if filled_today >= config.max_trades_per_day:
+            return ValidationResult(False, f"Daily trade limit ({config.max_trades_per_day}) reached — {filled_today} fills today")
+
+    # 3. Cooldown
     last = await _last_signal_time(db, config.user_id, ticker, signal.signal_type)
     if last:
         cooldown_end = last + timedelta(minutes=config.cooldown_minutes)

@@ -93,6 +93,7 @@ class AutomationConfigRequest(BaseModel):
     max_daily_loss_usd: float | None = None
     max_open_positions: int = 5
     cooldown_minutes: int = 60
+    max_trades_per_day: int | None = None
 
 
 class AutomationConfigResponse(BaseModel):
@@ -107,6 +108,7 @@ class AutomationConfigResponse(BaseModel):
     max_daily_loss_usd: float | None
     max_open_positions: int
     cooldown_minutes: int
+    max_trades_per_day: int | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

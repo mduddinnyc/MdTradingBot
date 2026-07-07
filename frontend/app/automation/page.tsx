@@ -23,6 +23,7 @@ const schema = z.object({
   max_daily_loss_usd: z.number().min(1).optional().nullable(),
   max_open_positions: z.number().int().min(1).max(20),
   cooldown_minutes: z.number().int().min(1),
+  max_trades_per_day: z.number().int().min(1).optional().nullable(),
 });
 type Form = z.infer<typeof schema>;
 
@@ -58,6 +59,7 @@ export default function AutomationPage() {
       max_position_pct: Math.round(existing.max_position_pct * 100),
       stop_loss_pct: parseFloat((existing.stop_loss_pct * 100).toFixed(2)),
       take_profit_pct: parseFloat((existing.take_profit_pct * 100).toFixed(2)),
+      max_trades_per_day: existing.max_trades_per_day ?? null,
     } : {
       broker_connection_id: connections[0]?.id || "",
       is_enabled: false,
@@ -67,6 +69,7 @@ export default function AutomationPage() {
       take_profit_pct: 4,
       max_open_positions: 5,
       cooldown_minutes: 60,
+      max_trades_per_day: null,
     },
   });
 
@@ -81,6 +84,7 @@ export default function AutomationPage() {
         max_position_pct: Math.round(existing.max_position_pct * 100),
         stop_loss_pct: parseFloat((existing.stop_loss_pct * 100).toFixed(2)),
         take_profit_pct: parseFloat((existing.take_profit_pct * 100).toFixed(2)),
+        max_trades_per_day: existing.max_trades_per_day ?? null,
       });
     } else {
       reset({ broker_connection_id: connections[0].id });
@@ -315,11 +319,21 @@ export default function AutomationPage() {
               {errors.max_daily_loss_usd && <p className="text-xs text-sell mt-1">{errors.max_daily_loss_usd.message}</p>}
             </div>
           </div>
-          <div>
-            <label className="label">Max Open Positions</label>
-            <input className="input w-32" type="number" min="1" max="20"
-              {...register("max_open_positions", { valueAsNumber: true })} />
-            {errors.max_open_positions && <p className="text-xs text-sell mt-1">{errors.max_open_positions.message}</p>}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="label">Max Open Positions</label>
+              <input className="input" type="number" min="1" max="20"
+                {...register("max_open_positions", { valueAsNumber: true })} />
+              <p className="text-xs text-gray-500 mt-1">Max concurrent open positions</p>
+              {errors.max_open_positions && <p className="text-xs text-sell mt-1">{errors.max_open_positions.message}</p>}
+            </div>
+            <div>
+              <label className="label">Max Trades Per Day</label>
+              <input className="input" type="number" min="1" placeholder="Unlimited"
+                {...register("max_trades_per_day", { setValueAs: (v) => v === "" ? null : parseInt(v, 10) })} />
+              <p className="text-xs text-gray-500 mt-1">Automation stops firing after this many fills today</p>
+              {errors.max_trades_per_day && <p className="text-xs text-sell mt-1">{errors.max_trades_per_day.message}</p>}
+            </div>
           </div>
         </div>
 

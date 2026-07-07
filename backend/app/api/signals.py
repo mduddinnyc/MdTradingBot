@@ -522,6 +522,7 @@ async def create_automation_config(body: AutomationConfigRequest, request: Reque
         max_daily_loss_usd=body.max_daily_loss_usd,
         max_open_positions=body.max_open_positions,
         cooldown_minutes=body.cooldown_minutes,
+        max_trades_per_day=body.max_trades_per_day,
     )
     db.add(config)
     await db.flush()
