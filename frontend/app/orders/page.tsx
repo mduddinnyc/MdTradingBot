@@ -54,17 +54,18 @@ const CHART_VIEW_OPTS: { key: ChartView; label: string }[] = [
   { key: "count",      label: "Trade Count"     },
 ];
 
-function ExecutionChart({ orders }: { orders: any[] }) {
+function ExecutionChart({ orders, period }: { orders: any[]; period: Period }) {
   const ref = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<ChartView>("cumulative");
 
-  // build day-level aggregates
+  // build day-level aggregates — note backend field is pnl_usd, not realized_pnl
   const byDay = useMemo(() => {
     const map: Record<string, { pnl: number; count: number }> = {};
     for (const o of orders) {
       if (!o.created_at) continue;
       const day = o.created_at.slice(0, 10);
-      const pnl = parseFloat(o.realized_pnl ?? "0") || 0;
+      if (!day || day.length < 10) continue;
+      const pnl = typeof o.pnl_usd === "number" ? o.pnl_usd : 0;
       if (!map[day]) map[day] = { pnl: 0, count: 0 };
       map[day].pnl += pnl;
       map[day].count += 1;
@@ -76,61 +77,78 @@ function ExecutionChart({ orders }: { orders: any[] }) {
 
   const hasData = byDay.length > 0;
 
+  // key the chart on period+view so it fully remounts between tab switches,
+  // preventing any lightweight-charts state from leaking across renders
   useEffect(() => {
     if (!ref.current || !hasData) return;
+    const container = ref.current;
 
-    const chart = createChart(ref.current, {
-      layout: { background: { type: ColorType.Solid, color: "#0f172a" }, textColor: "#94a3b8" },
-      grid: { vertLines: { color: "#1e293b" }, horzLines: { color: "#1e293b" } },
-      crosshair: { mode: CrosshairMode.Normal },
-      width: ref.current.clientWidth,
-      height: 180,
-      timeScale: { borderColor: "#1e293b", timeVisible: false },
-      rightPriceScale: { borderColor: "#1e293b" },
-    });
+    let chart: ReturnType<typeof createChart> | null = null;
+    let ro: ResizeObserver | null = null;
 
-    const toTime = (day: string) =>
-      Math.floor(new Date(day + "T12:00:00Z").getTime() / 1000) as any;
+    try {
+      chart = createChart(container, {
+        layout: { background: { type: ColorType.Solid, color: "#0f172a" }, textColor: "#94a3b8" },
+        grid: { vertLines: { color: "#1e293b" }, horzLines: { color: "#1e293b" } },
+        crosshair: { mode: CrosshairMode.Normal },
+        width: container.clientWidth || 600,
+        height: 180,
+        timeScale: { borderColor: "#1e293b", timeVisible: false },
+        rightPriceScale: { borderColor: "#1e293b" },
+      });
 
-    if (view === "pnl") {
-      const series = chart.addHistogramSeries({
-        color: "#10D987",
-        priceFormat: { type: "price", precision: 2 },
+      const toTime = (day: string) =>
+        Math.floor(new Date(day + "T12:00:00Z").getTime() / 1000) as any;
+
+      if (view === "pnl") {
+        const series = chart.addHistogramSeries({
+          color: "#10D987",
+          priceFormat: { type: "price", precision: 2 },
+        });
+        series.setData(
+          byDay.map(({ day, pnl }) => ({
+            time: toTime(day),
+            value: pnl,
+            color: pnl >= 0 ? "#10D987" : "#FF4D6D",
+          }))
+        );
+      } else if (view === "cumulative") {
+        let cum = 0;
+        const data = byDay.map(({ day, pnl }) => {
+          cum += pnl;
+          return { time: toTime(day), value: cum };
+        });
+        const lastVal = data[data.length - 1]?.value ?? 0;
+        const series = chart.addAreaSeries({
+          lineColor: lastVal >= 0 ? "#10D987" : "#FF4D6D",
+          topColor: lastVal >= 0 ? "rgba(16,217,135,0.3)" : "rgba(255,77,109,0.3)",
+          bottomColor: lastVal >= 0 ? "rgba(16,217,135,0.02)" : "rgba(255,77,109,0.02)",
+          lineWidth: 2,
+        });
+        series.setData(data);
+      } else {
+        const series = chart.addHistogramSeries({ color: "#5B7FFF" });
+        series.setData(byDay.map(({ day, count }) => ({ time: toTime(day), value: count })));
+      }
+
+      chart.timeScale().fitContent();
+
+      ro = new ResizeObserver(() => {
+        if (container && chart) {
+          chart.applyOptions({ width: container.clientWidth });
+        }
       });
-      series.setData(
-        byDay.map(({ day, pnl }) => ({
-          time: toTime(day),
-          value: pnl,
-          color: pnl >= 0 ? "#10D987" : "#FF4D6D",
-        }))
-      );
-    } else if (view === "cumulative") {
-      let cum = 0;
-      const data = byDay.map(({ day, pnl }) => {
-        cum += pnl;
-        return { time: toTime(day), value: cum };
-      });
-      const lastVal = data[data.length - 1]?.value ?? 0;
-      const series = chart.addAreaSeries({
-        lineColor: lastVal >= 0 ? "#10D987" : "#FF4D6D",
-        topColor: lastVal >= 0 ? "rgba(16,217,135,0.3)" : "rgba(255,77,109,0.3)",
-        bottomColor: lastVal >= 0 ? "rgba(16,217,135,0.02)" : "rgba(255,77,109,0.02)",
-        lineWidth: 2,
-      });
-      series.setData(data);
-    } else {
-      const series = chart.addHistogramSeries({ color: "#5B7FFF" });
-      series.setData(byDay.map(({ day, count }) => ({ time: toTime(day), value: count })));
+      ro.observe(container);
+    } catch (err) {
+      // lightweight-charts can throw if container has 0 width or data is malformed;
+      // swallow the error so the rest of the page remains functional
+      console.warn("ExecutionChart render error:", err);
     }
 
-    chart.timeScale().fitContent();
-
-    const ro = new ResizeObserver(() => {
-      if (ref.current) chart.applyOptions({ width: ref.current.clientWidth });
-    });
-    ro.observe(ref.current);
-
-    return () => { ro.disconnect(); chart.remove(); };
+    return () => {
+      try { ro?.disconnect(); } catch (_) {}
+      try { chart?.remove(); } catch (_) {}
+    };
   }, [byDay, view, hasData]);
 
   return (
@@ -202,7 +220,7 @@ export default function OrdersPage() {
   const [sorting, setSorting] = useState<SortingState>([{ id: "time", desc: true }]);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const { data: rawOrders = [] } = useQuery({
+  const { data: rawOrders = [], isLoading } = useQuery({
     queryKey: ["orders", period],
     queryFn: () => signalApi.orders(200, period),
     refetchInterval: 60_000,
@@ -231,7 +249,7 @@ export default function OrdersPage() {
         o.quantity,
         o.avg_fill_price ?? "",
         o.exit_price ?? "",
-        o.realized_pnl ?? "",
+        o.pnl_usd ?? "",       // fixed: backend field is pnl_usd
         o.status,
         o.is_automated ? "Auto" : "Manual",
         o.strategy_name ?? "",
@@ -320,7 +338,7 @@ export default function OrdersPage() {
     {
       id: "pnl",
       header: "P&L",
-      accessorFn: (row) => row.realized_pnl,
+      accessorFn: (row) => row.pnl_usd,   // fixed: was row.realized_pnl
       cell: ({ getValue }) => {
         const v = getValue() as number | null;
         if (v == null) return <span className="text-gray-600">—</span>;
@@ -370,7 +388,7 @@ export default function OrdersPage() {
       header: "Source",
       cell: ({ row }) => (
         <span className="text-xs text-gray-500">
-          {row.original.is_automated ? "Auto" : "Manual"}
+          {row.original.is_automated ? "🤖 Auto" : "Manual"}
         </span>
       ),
       sortingFn: (a, b) => {
@@ -450,11 +468,15 @@ export default function OrdersPage() {
           onChange={setSourceFilter}
         />
 
-        <span className="text-xs text-gray-600">{filtered.length} orders</span>
+        <span className="text-xs text-gray-600">
+          {isLoading ? "Loading…" : `${filtered.length} orders`}
+        </span>
       </div>
 
-      {/* Mini P&L chart */}
-      <ExecutionChart orders={filtered} />
+      {/* Chart — keyed on period so it fully remounts on every tab switch */}
+      <div key={`chart-${period}`}>
+        <ExecutionChart orders={filtered} period={period} />
+      </div>
 
       {/* Table */}
       <div className="card overflow-x-auto p-0">
@@ -483,7 +505,13 @@ export default function OrdersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-800/50">
-            {table.getRowModel().rows.length === 0 ? (
+            {isLoading ? (
+              <tr>
+                <td colSpan={columns.length} className="py-10 text-center text-gray-600 text-sm">
+                  Loading orders…
+                </td>
+              </tr>
+            ) : table.getRowModel().rows.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="py-10 text-center text-gray-500 text-sm">
                   No orders for this period
@@ -493,7 +521,7 @@ export default function OrdersPage() {
               table.getRowModel().rows.map((row) => (
                 <tr key={row.id} className="hover:bg-gray-800/20 transition-colors">
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="py-2.5 pl-5 last:pr-5">
+                    <td key={cell.id} className="py-2.5 pl-5 last:pr-5 text-left align-middle">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}

@@ -212,12 +212,6 @@ export default function AutomationPage() {
       {mode === "custom" && (
       <form onSubmit={handleSubmit((d) => mut.mutate(d))} className="space-y-6" noValidate>
 
-        <div className="flex justify-end">
-          <button type="button" onClick={() => setMode("wizard")} className="text-xs text-gray-400 hover:text-gray-200 underline">
-            Use guided setup instead
-          </button>
-        </div>
-
         {/* Enable toggle */}
         <div className="card flex items-center justify-between">
           <div>
@@ -340,9 +334,14 @@ export default function AutomationPage() {
         {error && <p className="text-sell text-sm">{error}</p>}
         {saved && <p className="text-buy text-sm">Saved successfully.</p>}
 
-        <button type="submit" className="btn-primary" disabled={isSubmitting}>
-          {isSubmitting ? "Saving…" : existing ? "Update config" : "Save config"}
-        </button>
+        <div className="flex items-center gap-4">
+          <button type="submit" className="btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? "Saving…" : existing ? "Update config" : "Save config"}
+          </button>
+          <button type="button" onClick={() => setMode("wizard")} className="text-xs text-gray-400 hover:text-gray-200 underline">
+            Use guided setup instead
+          </button>
+        </div>
       </form>
       )}
 
